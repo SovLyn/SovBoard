@@ -1,0 +1,20 @@
+# ── SovBoard Commit Message Template ──
+# 格式: <type>(<scope>): <subject>
+# 空一行后写正文（可选），再空一行写 footer（可选）
+#
+# Type 必填，scope 选填:
+#
+# feat      新功能
+# fix       修复
+# docs      AGENTS.md / README / 文档变更
+# refactor  重构（不修 bug 不加功能）
+# chore     构建、依赖、CI、配置变动
+# test      测试相关
+# style     代码格式（不影响逻辑）
+# perf      性能优化
+#
+# 示例:
+#   feat(cmd): 添加侧边栏折叠动画
+#   fix(window): 修复窗口最小化后恢复白屏
+#   chore: 升级 tauri 到 2.2.0
+#   docs: 补充架构说明和开发命令

@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build Output
+dist
+dist-ssr
+build
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Rust (handled by src-tauri/.gitignore, but keep for safety)
+*.rs.bk
+
+# Tauri generated
+src-tauri/gen/schemas
+
+# pnpm
+pnpm-lock.yaml
+
+# TypeScript
+*.tsbuildinfo
