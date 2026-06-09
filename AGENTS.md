@@ -154,3 +154,31 @@ docs: 补充架构说明和开发命令
 - 约定包管理使用 `pnpm`，不用 npm/yarn
 - 约定每次修改后需在 AGENTS.md 底部追加变更记录
 - 创建 `.gitmessage` 提交模板，配置 `git config commit.template` 自动加载
+
+### Session 2026-06-09 — 标签页导航 + 暗黑模式设置持久化
+- **Rust 后端**
+  - 添加 `tauri-plugin-store` v2 依赖（`Cargo.toml`），在 `lib.rs` 中注册插件
+  - 更新 `capabilities/default.json`，添加 `store:default` 权限
+- **前端**
+  - 安装 `@tauri-apps/plugin-store` v2.4.3
+  - 拆分组件：`src/components/HomePage.tsx`（原有 Greet 功能）、`src/components/SettingsPage.tsx`（暗黑模式开关）
+  - 重构 `App.tsx`：标签页容器，含「主页」和「设置」两个 Tab
+  - 设置持久化：使用 `@tauri-apps/plugin-store` 的 `load`/`get`/`set`/`save` API，启动时加载、切换时保存
+  - 暗黑模式：通过 `data-theme="dark"` 属性驱动 CSS 变量切换，同步调用 Rust 命令切换原生窗口主题
+- **CSS 重构**
+  - 将硬编码颜色全部改为 CSS 自定义属性，支持 `[data-theme="dark"]` 覆盖
+  - 新增标签栏样式、设置页布局、toggle switch 样式
+- **修复**：暗黑模式初始化逻辑从 `SettingsPage` 提升到 `App.tsx`，确保启动时（无需切换到设置页）立即应用已保存的主题
+
+### Session 2026-06-09 — 右侧导航 + 主题三态（亮色/暗色/遵循系统）
+- **布局**：导航从顶部标签栏改为右侧竖排导航栏（flex-direction: row，内容在左，导航在右）
+- **主题模式**：从二态 toggle 改为三选一 radio（亮色 / 暗色 / 遵循系统）
+  - themeMode 存入 store（"light" | "dark" | "system"），兼容旧版 darkMode: boolean
+  - "遵循系统"：选择时/启动时读取 prefers-color-scheme，并监听系统主题变化实时切换
+  - 切换为其它模式时自动停止系统监听
+
+### Session 2026-06-09 — 主题方案修复 + 美化
+- **主题切换方案变更**：从 `data-theme` 属性改为 CSS class `.theme-dark` / `.theme-light`，避免潜在兼容问题
+- **移除 `set_dark_mode` invoke**：`window.set_theme()` 会修改 webview 内部的 `prefers-color-scheme`，导致"遵循系统"模式下读取系统设置不准；现仅通过 CSS class 切换主题，不再触碰原生窗口主题
+- **代码清理**：移除 `load()` 调用的无效 `defaults` 参数、`console.log` 调试代码、未使用的 `invoke` 导入
+- **美化**：`main.tsx` 移除 `React.StrictMode` 包裹和 `React` 导入
