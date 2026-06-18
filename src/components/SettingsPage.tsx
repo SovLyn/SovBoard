@@ -1,8 +1,12 @@
+import { InputNumber } from "antd";
+
 type ThemeMode = "light" | "dark" | "system";
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
   onSetThemeMode: (mode: ThemeMode) => void;
+  maxClipEntries: number;
+  onSetMaxClipEntries: (max: number) => void;
   ready: boolean;
 }
 
@@ -12,7 +16,13 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "遵循系统" },
 ];
 
-function SettingsPage({ themeMode, onSetThemeMode, ready }: SettingsPageProps) {
+function SettingsPage({
+  themeMode,
+  onSetThemeMode,
+  maxClipEntries,
+  onSetMaxClipEntries,
+  ready,
+}: SettingsPageProps) {
   if (!ready) {
     return <div className="page settings-page">加载中...</div>;
   }
@@ -38,6 +48,18 @@ function SettingsPage({ themeMode, onSetThemeMode, ready }: SettingsPageProps) {
             </label>
           ))}
         </div>
+      </div>
+
+      <div className="setting-item">
+        <span className="setting-label">最大保存条数</span>
+        <InputNumber
+          min={8}
+          max={1024}
+          step={8}
+          value={maxClipEntries}
+          onChange={(v) => v !== null && onSetMaxClipEntries(v)}
+          style={{ width: 120 }}
+        />
       </div>
     </div>
   );

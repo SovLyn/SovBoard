@@ -15,7 +15,8 @@
     "@tauri-apps/plugin-store": "^2.4.3",
     "antd": "^6.4.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tauri-plugin-clipboard-x-api": "^2.0.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

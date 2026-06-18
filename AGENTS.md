@@ -182,3 +182,30 @@ docs: 补充架构说明和开发命令
 - **移除 `set_dark_mode` invoke**：`window.set_theme()` 会修改 webview 内部的 `prefers-color-scheme`，导致"遵循系统"模式下读取系统设置不准；现仅通过 CSS class 切换主题，不再触碰原生窗口主题
 - **代码清理**：移除 `load()` 调用的无效 `defaults` 参数、`console.log` 调试代码、未使用的 `invoke` 导入
 - **美化**：`main.tsx` 移除 `React.StrictMode` 包裹和 `React` 导入
+
+### Session 2026-06-18 — 剪贴板历史管理功能
+- **依赖**：安装并配置 `tauri-plugin-clipboard-x` v2.0.2（Rust plugin + 前端 API），注册 `clipboard-x:default` 权限
+- **后端**：无需 Rust 代码改动——`tauri-plugin-clipboard-x` 提供原生剪贴板监听 (`onClipboardChange`) 和读写 API
+- **前端 App.tsx**
+  - 将模块顶层 demo 代码重构为 useEffect 中的剪贴板监听生命周期
+  - 实现 `ClipEntry` 数据结构，支持 text / html / rtf / image / files 五种内容类型
+  - 实现自排除机制（`skipNextChangeRef`）：从历史面板复制时不产生新记录
+  - 实现去重：连续复制相同内容只保留一条
+  - 持久化：使用 `tauri-plugin-store` 的独立 `clipboard.json` 文件，entries 变化时自动保存
+  - 标签页导航新增「剪贴板」入口
+- **前端 ClipboardPage.tsx**（新建）
+  - 手风琴折叠列表：同一时间只展开一个条目，折叠态显示 emoji 类型图标 + 截断预览 + YYYY/MM/DD HH:MM:SS 时间
+  - 展开态根据类型渲染：文本用 `<pre>` 块（最大 300px 可滚动）、HTML 源码折叠 + 可选预览、图片用 `convertFileSrc` 显示缩略图、文件显示路径列表
+  - 操作按钮：复制（根据类型调用 writeText/writeHTML/writeImage/writeFiles）、删除（Popconfirm）、清空全部
+  - 空状态提示
+- **前端 SettingsPage.tsx**：新增「最大保存条数」设置项（antd InputNumber，范围 8-1024，步长 8，默认 32），存入 settings.json
+- **前端 App.css**：新增剪贴板页面全套样式（`.clipboard-page` / `.clip-entry` / `.clip-text-content` / `.clip-image` 等），复用 CSS 变量体系适配亮色/暗色主题，条目 hover/accent 边框高亮
+- **验证**：`cargo check` + `pnpm build`（tsc + vite）均编译通过
+
+### Session 2026-06-18 — 修复剪贴板图片预览权限
+- 在 `tauri.conf.json` 的 `app.security` 中添加 `assetProtocol: { enable: true, scope: ["**"] }`，允许 asset protocol 访问 app data 中的图片文件，修复 `ERR_CONNECTION_REFUSED` 报错
+
+### Session 2026-06-18 — 移除主页
+- 从 `App.tsx` 移除 HomePage 导入、标签页和渲染分支，默认 Tab 改为「剪贴板」
+- 清空 `HomePage.tsx` 组件（保留占位避免 tsc `isolatedModules` 报错）
+- 从 `App.css` 移除 `.logo-*`、`.home-page`、`.greet-form`、`#greet-input` 等主页专用样式

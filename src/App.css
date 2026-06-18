@@ -76,7 +76,7 @@
 }
 
 .page {
-  max-width: 600px;
+  max-width: 800px;
   margin: 0 auto;
 }
 
@@ -114,46 +114,6 @@
   color: var(--color-text);
   font-weight: 600;
   border-left-color: var(--color-accent);
-}
-
-/* ===== 主页面 ===== */
-.logo-row {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.home-page p {
-  text-align: center;
-  margin-bottom: 12px;
-  color: var(--color-text-secondary);
-}
-
-.greet-form {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 12px;
 }
 
 a {
@@ -204,10 +164,6 @@ button:active {
   background-color: var(--color-tab-inactive-bg);
 }
 
-#greet-input {
-  margin-right: 4px;
-}
-
 /* ===== 设置页面 ===== */
 .settings-page h2 {
   margin-bottom: 24px;
@@ -221,6 +177,10 @@ button:active {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
+}
+
+.setting-item + .setting-item {
+  margin-top: 12px;
 }
 
 .setting-label {
@@ -280,4 +240,228 @@ button:active {
   height: 10px;
   border-radius: 50%;
   background: var(--color-radio-dot);
+}
+
+/* ===== 剪贴板页面 ===== */
+.clipboard-page h2 {
+  margin-bottom: 0;
+}
+
+.clipboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.btn-clear:hover {
+  color: #e55;
+  border-color: #e55;
+}
+
+.clipboard-empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 64px 0;
+  font-size: 15px;
+}
+
+/* ----- 条目列表 ----- */
+.clipboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.clip-entry {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.clip-entry:hover {
+  border-color: var(--color-accent);
+}
+
+.clip-entry.expanded {
+  border-color: var(--color-accent);
+}
+
+/* ----- 条目头部（可点击折叠） ----- */
+.clip-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.clip-expand-arrow {
+  flex-shrink: 0;
+  width: 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.clip-entry-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.clip-entry-preview {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.clip-entry-tags {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+/* ----- 元信息 + 操作 ----- */
+.clip-entry-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px 10px 36px;
+}
+
+.clip-entry-time {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-family: "Consolas", "Cascadia Code", "Fira Code", monospace;
+}
+
+.clip-entry-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-action {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+}
+
+.btn-action:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-delete:hover {
+  color: #e55;
+  border-color: #e55;
+}
+
+/* ----- 展开内容区 ----- */
+.clip-entry-body {
+  padding: 0 12px 12px 36px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.clip-text-content {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: "Consolas", "Cascadia Code", "Fira Code", monospace;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.clip-text-content code {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* HTML 源码折叠 */
+.clip-html-details {
+  margin-top: 8px;
+}
+
+.clip-html-details summary {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.clip-html-details summary:hover {
+  color: var(--color-text);
+}
+
+/* 图片 */
+.clip-image-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.clip-image {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  object-fit: contain;
+}
+
+.clip-image-info {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-family: "Consolas", "Cascadia Code", "Fira Code", monospace;
+}
+
+/* 文件列表 */
+.clip-files-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.clip-files-list li {
+  font-size: 13px;
+  color: var(--color-text);
+  font-family: "Consolas", "Cascadia Code", "Fira Code", monospace;
+  padding: 4px 8px;
+  background: var(--color-bg);
+  border-radius: 4px;
+  word-break: break-all;
 }
