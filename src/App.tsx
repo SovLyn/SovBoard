@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { load } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 import {
   startListening,
   onClipboardChange,
@@ -33,6 +34,13 @@ interface ClipboardStore {
   nextId: number;
 }
 
+/** Rust 清理命令返回结果 */
+interface CleanupResult {
+  removed_files: string[];
+  stale_entry_ids: number[];
+  errors: string[];
+}
+
 type Tab = "clipboard" | "settings";
 type ThemeMode = "light" | "dark" | "system";
 
@@ -46,8 +54,10 @@ const CLIPBOARD_STORE = "clipboard.json";
 const THEME_MODE_KEY = "themeMode";
 const LEGACY_DARK_MODE_KEY = "darkMode";
 const MAX_CLIP_ENTRIES_KEY = "maxClipEntries";
+const CLEANUP_INTERVAL_KEY = "cleanupInterval";
 const CLIPBOARD_DATA_KEY = "clipboardData";
 const DEFAULT_MAX_ENTRIES = 32;
+const DEFAULT_CLEANUP_INTERVAL = 60;
 
 // ========== 工具函数 ==========
 
@@ -142,11 +152,21 @@ function App() {
   const [maxEntries, setMaxEntries] = useState(DEFAULT_MAX_ENTRIES);
   const [clipReady, setClipReady] = useState(false);
 
+  // 清理间隔（秒）
+  const [cleanupInterval, setCleanupInterval] = useState(DEFAULT_CLEANUP_INTERVAL);
+
   // refs
   const skipNextChangeRef = useRef(false);
   const nextIdRef = useRef(1);
   const maxEntriesRef = useRef(DEFAULT_MAX_ENTRIES);
   const listeningStartedRef = useRef(false);
+  const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clipEntriesRef = useRef<ClipEntry[]>([]);
+
+  // 同步最新的 clipEntries 到 ref（供定时器回调使用，避免重建定时器）
+  useEffect(() => {
+    clipEntriesRef.current = clipEntries;
+  }, [clipEntries]);
 
   // ===== 主题初始化 =====
   useEffect(() => {
@@ -230,7 +250,7 @@ function App() {
         // 首次使用
       }
 
-      // 从 settings store 读取 maxEntries（优先级更高）
+      // 从 settings store 读取配置（maxEntries 和 cleanupInterval）
       try {
         const settingsStore = await load(SETTINGS_STORE, {
           autoSave: false,
@@ -240,6 +260,12 @@ function App() {
           await settingsStore.get<number>(MAX_CLIP_ENTRIES_KEY);
         if (typeof maxFromSettings === "number") {
           savedMax = Math.min(1024, Math.max(8, maxFromSettings));
+        }
+
+        const savedInterval =
+          await settingsStore.get<number>(CLEANUP_INTERVAL_KEY);
+        if (typeof savedInterval === "number") {
+          setCleanupInterval(Math.min(3600, Math.max(10, savedInterval)));
         }
       } catch {
         // ignore
@@ -308,6 +334,53 @@ function App() {
     persistClipboard(clipEntries, maxEntries, nextIdRef.current);
   }, [clipEntries, clipReady]);
 
+  // ===== 清理孤儿图片 =====
+
+  const runCleanup = useCallback(async () => {
+    const entries = clipEntriesRef.current;
+    const imageEntries = entries
+      .filter((e): e is ClipEntry & { image: NonNullable<ClipEntry["image"]> } =>
+        e.image !== undefined,
+      )
+      .map((e) => ({ id: e.id, path: e.image.path }));
+
+    if (imageEntries.length === 0) return;
+
+    try {
+      const result = await invoke<CleanupResult>("cleanup_orphan_images", {
+        entries: imageEntries,
+      });
+
+      // 删除前端"脏条目"（条目存在但图片文件已丢失）
+      if (result.stale_entry_ids.length > 0) {
+        const staleSet = new Set(result.stale_entry_ids);
+        setClipEntries((prev) => prev.filter((e) => !staleSet.has(e.id)));
+      }
+    } catch (err) {
+      console.error("清理孤儿图片失败:", err);
+    }
+  }, []);
+
+  // 定时清理（间隔变化时：清除旧定时器 → 立即执行一次 → 启动新定时器）
+  useEffect(() => {
+    if (!clipReady) return;
+
+    // 立即执行一次
+    runCleanup();
+
+    // 启动新定时器
+    cleanupTimerRef.current = setInterval(() => {
+      runCleanup();
+    }, cleanupInterval * 1000);
+
+    return () => {
+      if (cleanupTimerRef.current !== null) {
+        clearInterval(cleanupTimerRef.current);
+        cleanupTimerRef.current = null;
+      }
+    };
+  }, [cleanupInterval, clipReady, runCleanup]);
+
   // ===== 剪贴板操作 =====
 
   const handleCopy = useCallback(async (entry: ClipEntry) => {
@@ -362,6 +435,23 @@ function App() {
     setClipEntries((prev) => prev.slice(0, clamped));
   }, []);
 
+  const handleSetCleanupInterval = useCallback(async (seconds: number) => {
+    const clamped = Math.min(3600, Math.max(10, seconds));
+    setCleanupInterval(clamped);
+
+    // 持久化到 settings store
+    try {
+      const store = await load(SETTINGS_STORE, {
+        autoSave: false,
+        defaults: {},
+      });
+      await store.set(CLEANUP_INTERVAL_KEY, clamped);
+      await store.save();
+    } catch (err) {
+      console.error("保存清理间隔失败:", err);
+    }
+  }, []);
+
   // ===== 渲染 =====
 
   return (
@@ -381,6 +471,8 @@ function App() {
             onSetThemeMode={setThemeModePersist}
             maxClipEntries={maxEntries}
             onSetMaxClipEntries={handleSetMaxEntries}
+            cleanupInterval={cleanupInterval}
+            onSetCleanupInterval={handleSetCleanupInterval}
             ready={themeReady}
           />
         )}

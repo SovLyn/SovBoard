@@ -7,6 +7,8 @@ interface SettingsPageProps {
   onSetThemeMode: (mode: ThemeMode) => void;
   maxClipEntries: number;
   onSetMaxClipEntries: (max: number) => void;
+  cleanupInterval: number;
+  onSetCleanupInterval: (seconds: number) => void;
   ready: boolean;
 }
 
@@ -21,6 +23,8 @@ function SettingsPage({
   onSetThemeMode,
   maxClipEntries,
   onSetMaxClipEntries,
+  cleanupInterval,
+  onSetCleanupInterval,
   ready,
 }: SettingsPageProps) {
   if (!ready) {
@@ -58,6 +62,18 @@ function SettingsPage({
           step={8}
           value={maxClipEntries}
           onChange={(v) => v !== null && onSetMaxClipEntries(v)}
+          style={{ width: 120 }}
+        />
+      </div>
+
+      <div className="setting-item">
+        <span className="setting-label">清理间隔（秒）</span>
+        <InputNumber
+          min={10}
+          max={3600}
+          step={10}
+          value={cleanupInterval}
+          onChange={(v) => v !== null && onSetCleanupInterval(v)}
           style={{ width: 120 }}
         />
       </div>

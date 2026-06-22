@@ -209,3 +209,19 @@ docs: 补充架构说明和开发命令
 - 从 `App.tsx` 移除 HomePage 导入、标签页和渲染分支，默认 Tab 改为「剪贴板」
 - 清空 `HomePage.tsx` 组件（保留占位避免 tsc `isolatedModules` 报错）
 - 从 `App.css` 移除 `.logo-*`、`.home-page`、`.greet-form`、`#greet-input` 等主页专用样式
+
+### Session 2026-06-22 — 剪贴板图片孤儿文件定时清理
+- **Rust 后端**
+  - 在 `lib.rs` 中注册 `cleanup_orphan_images` Tauri command，接收前端图片条目列表
+  - 从条目路径推断图片保存目录，扫描目录中所有图片文件（按扩展名过滤）
+  - 双向清理：删除"磁盘有但条目没引用"的孤儿图片，返回"条目有但文件已丢失"的脏条目 ID
+  - 路径标准化（canonicalize）确保跨平台对比正确
+- **前端 SettingsPage.tsx**
+  - 新增「清理间隔」设置项（antd InputNumber，范围 10-3600 秒，步长 10，默认 60）
+- **前端 App.tsx**
+  - 新增 `cleanupInterval` 状态和 `handleSetCleanupInterval` 持久化回调（存入 settings.json）
+  - 新增 `runCleanup` 函数：收集所有含 image 的条目 → `invoke("cleanup_orphan_images")` → 根据返回的 `stale_entry_ids` 过滤前端条目
+  - 新增 `useEffect` 定时器：依赖 `cleanupInterval` 和 `clipReady`，间隔变化时清除旧定时器 → 立即执行一次 → 启动新定时器
+  - 使用 `clipEntriesRef` 同步最新条目列表，避免定时器因条目变化频繁重建
+  - 启动时从 settings store 加载已保存的清理间隔
+- **验证**：`cargo check` + `pnpm build` 均编译通过
