@@ -225,3 +225,38 @@ docs: 补充架构说明和开发命令
   - 使用 `clipEntriesRef` 同步最新条目列表，避免定时器因条目变化频繁重建
   - 启动时从 settings store 加载已保存的清理间隔
 - **验证**：`cargo check` + `pnpm build` 均编译通过
+
+### Session 2026-06-22 — 剪贴板 Tag 完善 + 全局快捷键快速选择器
+- **Tag 完善**：`ClipboardPage.tsx` 的 `getPreview()` 重写，所有类型（文本/HTML/图片/文件/RTF）均有独立 tag，按类型分配不同颜色（文本 blue、HTML orange、图片 purple、文件 cyan、RTF red）
+- **全局快捷键基础设施**
+  - 添加 `tauri-plugin-global-shortcut` v2 Rust 依赖 + `@tauri-apps/plugin-global-shortcut` v2.3.2 前端依赖
+  - 更新 `capabilities/default.json` 添加 `global-shortcut:default` 权限
+  - 在 `lib.rs` 中注册 `tauri_plugin_global_shortcut` plugin
+- **QuickSelector 浮层组件**（`src/components/QuickSelector.tsx` 新建）
+  - 半透明模糊遮罩 + 居中面板，最多显示 8 条剪贴板条目
+  - 滚轮（↑↓）和键盘（ArrowUp/ArrowDown）切换高亮项
+  - 高亮项用 accent 色背景突出，底部操作提示
+  - 复用 `getQuickPreview` + `tagColor` 与主界面一致的预览逻辑
+- **App.tsx 集成**
+  - 快捷键注册 useEffect：依赖 `shortcut` + `clipReady`，自动注册/注销
+  - `Pressed` 事件：`focus()` 窗口 → 显示 QuickSelector → 高亮 index 归零
+  - `Released` 事件：隐藏 QuickSelector → 根据 `clipEntriesRef` + `highlightIndexRef` 复制选中条目到剪贴板 → 自排除跳过监听
+  - `handleSetShortcut`：持久化到 `settings.json`（key: `globalShortcut`）
+  - 启动时从 settings store 加载已保存的快捷键，默认 `Ctrl+Alt+Q`
+- **设置页更新**：新增「全局快捷键」输入框（antd Input），支持自由编辑快捷键组合
+- **CSS**：`App.css` 追加 `.quick-selector-*` 全套样式（overlay 模糊背景 / panel 圆角阴影 / item hover+active 状态 / tags / hint 提示）
+- **验证**：`cargo check` + `tsc --noEmit` + `pnpm build` 均通过
+- **修复**：`global-shortcut:default` 权限不包含 `register`/`unregister` 命令，改为显式添加 `global-shortcut:allow-register` + `global-shortcut:allow-unregister`
+
+### Session 2026-07-02 — QuickSelector 改为独立 Tauri 窗口
+- **架构重构**：将主窗口内嵌浮层改为独立 Tauri 窗口（无边框、居中、置顶、skip_taskbar）
+- **预创建策略**：在 `lib.rs` 的 `setup()` 中预创建隐藏窗口，按快捷键时 `show()`/`hide()` 复用，避免每次 `build()` 阻塞
+- **URL 修复**：`get_quick_selector_url()` 改为根据 `cfg!(debug_assertions)` 直接构造，不依赖主窗口 URL（`setup()` 时主窗口为 `about:blank`）
+- **权限修复**：`capabilities/default.json` 的 `windows` 数组添加 `"quick-selector"`，允许 QS 窗口使用 store
+- **数据读取**：`QuickSelectorApp` 直接从 `clipboard.json` store 读取数据，通过 `entries-updated` 事件触发刷新
+- **前端入口分流**：`main.tsx` 根据 `?window=quick-selector` query 参数分流渲染 `QuickSelectorApp`
+- **共用模块**：抽取 `src/utils/clipboardPreview.ts`（`tagColor` / `getQuickPreview`），`QuickSelector.tsx` 和 `QuickSelectorApp.tsx` 共用
+- **新增命令**：`show_quick_selector` / `hide_quick_selector` / `get_quick_selector_entries`（Rust）
+- **新增样式**：`.quick-selector-window` 独立窗口专用样式
+- **交互增强**：条目全部显示（移除 8 条限制）、`scrollIntoView` 自动跟随高亮项、Esc 键关闭窗口
+- **验证**：`cargo check` + `pnpm build` 均通过

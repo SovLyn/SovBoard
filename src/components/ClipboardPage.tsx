@@ -26,21 +26,32 @@ interface PreviewInfo {
   tags: string[];
 }
 
+/** 根据 tag 标签名返回对应的 antd Tag 颜色 */
+function tagColor(label: string): string {
+  if (label.startsWith("文本")) return "blue";
+  if (label.startsWith("HTML")) return "orange";
+  if (label.startsWith("图片")) return "purple";
+  if (label.startsWith("文件")) return "cyan";
+  if (label.startsWith("RTF")) return "red";
+  return "default";
+}
+
 function getPreview(entry: ClipEntry): PreviewInfo {
   const tags: string[] = [];
+
+  // 按存在性收集 tag
+  if (entry.text) tags.push("文本");
+  if (entry.html) tags.push("HTML");
+  if (entry.image) tags.push("图片");
+  if (entry.files) tags.push(`文件 ×${entry.files.length}`);
+  if (entry.rtf) tags.push("RTF");
 
   // text — 最高优先级
   if (entry.text) {
     const singleLine = entry.text.replace(/\n/g, " ");
     const preview =
       singleLine.length > 40 ? singleLine.substring(0, 40) + "…" : singleLine;
-
-    if (entry.image) {
-      tags.push("image+text");
-      return { text: preview, icon: "🖼️", tags };
-    }
-    if (entry.html) tags.push("HTML");
-    return { text: preview, icon: "📄", tags };
+    return { text: preview, icon: entry.image ? "🖼️" : "📄", tags };
   }
 
   // html（无 text）
@@ -50,7 +61,6 @@ function getPreview(entry: ClipEntry): PreviewInfo {
       stripped.length > 40
         ? stripped.substring(0, 40) + "…"
         : stripped || "(空HTML)";
-    tags.push("HTML");
     return { text: preview, icon: "🌐", tags };
   }
 
@@ -70,7 +80,6 @@ function getPreview(entry: ClipEntry): PreviewInfo {
 
   // rtf
   if (entry.rtf) {
-    tags.push("RTF");
     const preview =
       entry.rtf.length > 40
         ? entry.rtf.substring(0, 40) + "…"
@@ -150,7 +159,7 @@ function ClipboardPage({
                 {preview.tags.length > 0 && (
                   <span className="clip-entry-tags">
                     {preview.tags.map((t) => (
-                      <Tag key={t} color="blue">
+                      <Tag key={t} color={tagColor(t)}>
                         {t}
                       </Tag>
                     ))}

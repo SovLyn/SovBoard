@@ -1,8 +1,18 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use tauri::Emitter;
+use tauri::Manager;
+use tauri::WebviewUrl;
+
+// ========== QuickSelector 窗口状态 ==========
+
+struct QuickSelectorState {
+    entries_json: Mutex<String>,
+}
 
 // ========== 清理命令相关类型 ==========
 
@@ -36,21 +46,15 @@ fn is_image_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-// ========== Tauri command ==========
+// ========== Tauri commands ==========
 
 /// 清理孤立的剪贴板图片文件。
-///
-/// - 接收前端当前所有拥有 image 的条目列表。
-/// - 从第一条路径推断图片保存目录。
-/// - 扫描目录中所有图片文件，删除"磁盘有但条目没引用"的孤儿文件。
-/// - 检查每条条目的图片文件是否存在，返回"条目有但文件丢了"的 ID 列表。
 #[tauri::command]
 fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, String> {
     let mut removed_files: Vec<String> = Vec::new();
     let mut stale_entry_ids: Vec<u64> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
-    // ---- 收集已知路径集合 (标准化) ----
     let known_paths: HashSet<String> = entries
         .iter()
         .map(|e| {
@@ -62,7 +66,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
         })
         .collect();
 
-    // ---- 推断图片目录 ----
     let scan_dir = match entries.first() {
         Some(first) => match Path::new(&first.path).parent() {
             Some(parent) if parent.as_os_str().len() > 0 => parent.to_path_buf(),
@@ -71,7 +74,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
             }
         },
         None => {
-            // 没有图片条目，无需清理
             return Ok(CleanupResult {
                 removed_files,
                 stale_entry_ids,
@@ -81,7 +83,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
     };
 
     if !scan_dir.exists() {
-        // 目录不存在，但需要检查条目路径是否有效
         for entry in &entries {
             if !Path::new(&entry.path).exists() {
                 stale_entry_ids.push(entry.id);
@@ -94,7 +95,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
         });
     }
 
-    // ---- 扫描目录，删除孤儿图片 ----
     match fs::read_dir(&scan_dir) {
         Ok(dir_entries) => {
             for dir_entry in dir_entries {
@@ -108,12 +108,10 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
 
                 let file_path = dir_entry.path();
 
-                // 只处理文件（不递归子目录）
                 if !file_path.is_file() {
                     continue;
                 }
 
-                // 只处理图片文件
                 if !is_image_file(&file_path) {
                     continue;
                 }
@@ -124,7 +122,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
                 let canonical_str = canonical.to_string_lossy().to_string();
 
                 if !known_paths.contains(&canonical_str) {
-                    // 孤儿图片：磁盘有但条目没引用 → 删除
                     match fs::remove_file(&file_path) {
                         Ok(()) => {
                             removed_files.push(file_path.to_string_lossy().to_string());
@@ -145,7 +142,6 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
         }
     }
 
-    // ---- 检查条目路径是否仍存 ----
     for entry in &entries {
         if !Path::new(&entry.path).exists() {
             stale_entry_ids.push(entry.id);
@@ -159,6 +155,71 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
     })
 }
 
+/// 构建 QuickSelector 窗口的 URL。
+/// 开发模式直连 Vite dev server，生产模式用 App 相对路径。
+fn get_quick_selector_url(_app: &tauri::AppHandle) -> WebviewUrl {
+    if cfg!(debug_assertions) {
+        WebviewUrl::External(
+            "http://localhost:1420/?window=quick-selector"
+                .parse()
+                .unwrap(),
+        )
+    } else {
+        WebviewUrl::App("index.html?window=quick-selector".into())
+    }
+}
+
+/// 显示 QuickSelector 窗口（预创建的隐藏窗口，只做 show + 发送数据）。
+#[tauri::command]
+fn show_quick_selector(app: tauri::AppHandle, entries_json: String) -> Result<(), String> {
+    // 存储条目到全局状态
+    let state = app.state::<QuickSelectorState>();
+    *state.entries_json.lock().map_err(|e| e.to_string())? = entries_json;
+
+    // 获取预创建的窗口
+    let window = app
+        .get_webview_window("quick-selector")
+        .ok_or_else(|| "quick-selector 窗口未找到".to_string())?;
+
+    // 先居中
+    window.center().map_err(|e| e.to_string())?;
+
+    // 通知 QS 窗口更新数据
+    let json = state.entries_json.lock().map_err(|e| e.to_string())?.clone();
+    window
+        .emit("quick-selector:entries-updated", json)
+        .map_err(|e| e.to_string())?;
+
+    // 显示窗口
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// 隐藏 QuickSelector 窗口（不销毁，下次复用）。
+#[tauri::command]
+fn hide_quick_selector(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("quick-selector") {
+        let _ = window.emit("quick-selector:close", ());
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// QuickSelector 窗口调用此命令获取条目数据。
+#[tauri::command]
+fn get_quick_selector_entries(app: tauri::AppHandle) -> Result<String, String> {
+    let state = app.state::<QuickSelectorState>();
+    let json = state
+        .entries_json
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    Ok(json)
+}
+
 // ========== 应用入口 ==========
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -167,7 +228,31 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_x::init())
-        .invoke_handler(tauri::generate_handler![cleanup_orphan_images])
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(QuickSelectorState {
+            entries_json: Mutex::new("[]".into()),
+        })
+        .setup(|app| {
+            // 预创建 QuickSelector 窗口（隐藏，按快捷键时 show/hide 复用）
+            let url = get_quick_selector_url(&app.handle());
+            let _qs_window = tauri::WebviewWindowBuilder::new(app, "quick-selector", url)
+                .title("QuickSelector")
+                .inner_size(540.0, 420.0)
+                .decorations(false)
+                .always_on_top(true)
+                .center()
+                .skip_taskbar(true)
+                .visible(false)
+                .build()
+                .expect("预创建 QuickSelector 窗口失败");
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            cleanup_orphan_images,
+            show_quick_selector,
+            hide_quick_selector,
+            get_quick_selector_entries,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

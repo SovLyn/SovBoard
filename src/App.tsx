@@ -11,7 +11,12 @@ import {
   getDefaultSaveImagePath,
   type ReadClipboard,
 } from "tauri-plugin-clipboard-x-api";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import {
+  register,
+  unregister,
+  type ShortcutEvent,
+} from "@tauri-apps/plugin-global-shortcut";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import ClipboardPage from "./components/ClipboardPage";
 import SettingsPage from "./components/SettingsPage";
 import "./App.css";
@@ -56,6 +61,8 @@ const LEGACY_DARK_MODE_KEY = "darkMode";
 const MAX_CLIP_ENTRIES_KEY = "maxClipEntries";
 const CLEANUP_INTERVAL_KEY = "cleanupInterval";
 const CLIPBOARD_DATA_KEY = "clipboardData";
+const SHORTCUT_KEY = "globalShortcut";
+const DEFAULT_SHORTCUT = "Ctrl+Alt+Q";
 const DEFAULT_MAX_ENTRIES = 32;
 const DEFAULT_CLEANUP_INTERVAL = 60;
 
@@ -154,6 +161,9 @@ function App() {
 
   // 清理间隔（秒）
   const [cleanupInterval, setCleanupInterval] = useState(DEFAULT_CLEANUP_INTERVAL);
+
+  // 全局快捷键
+  const [shortcut, setShortcut] = useState(DEFAULT_SHORTCUT);
 
   // refs
   const skipNextChangeRef = useRef(false);
@@ -266,6 +276,12 @@ function App() {
           await settingsStore.get<number>(CLEANUP_INTERVAL_KEY);
         if (typeof savedInterval === "number") {
           setCleanupInterval(Math.min(3600, Math.max(10, savedInterval)));
+        }
+
+        const savedShortcut =
+          await settingsStore.get<string>(SHORTCUT_KEY);
+        if (typeof savedShortcut === "string" && savedShortcut.trim().length > 0) {
+          setShortcut(savedShortcut.trim());
         }
       } catch {
         // ignore
@@ -452,6 +468,100 @@ function App() {
     }
   }, []);
 
+  const handleSetShortcut = useCallback(async (newShortcut: string) => {
+    const trimmed = newShortcut.trim();
+    if (trimmed.length === 0) return;
+    setShortcut(trimmed);
+
+    try {
+      const store = await load(SETTINGS_STORE, {
+        autoSave: false,
+        defaults: {},
+      });
+      await store.set(SHORTCUT_KEY, trimmed);
+      await store.save();
+    } catch (err) {
+      console.error("保存快捷键失败:", err);
+    }
+  }, []);
+
+  // ===== 全局快捷键注册 =====
+  useEffect(() => {
+    if (!clipReady || shortcut.length === 0) return;
+
+    const current = shortcut;
+
+    async function setup() {
+      try {
+        await register(current, (event: ShortcutEvent) => {
+          if (event.state === "Pressed") {
+            const json = JSON.stringify(clipEntriesRef.current);
+            invoke("show_quick_selector", { entriesJson: json }).catch((err) =>
+              console.error("[快捷键] 打开 QuickSelector 窗口失败:", err),
+            );
+          } else if (event.state === "Released") {
+            invoke("hide_quick_selector").catch((err) =>
+              console.error("[快捷键] 关闭 QuickSelector 窗口失败:", err),
+            );
+          }
+        });
+      } catch (err) {
+        console.error(`注册全局快捷键 ${current} 失败:`, err);
+      }
+    }
+
+    setup();
+
+    return () => {
+      unregister(current).catch(() => {});
+    };
+  }, [shortcut, clipReady]);
+
+  // ===== QuickSelector 结果监听 =====
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    (async () => {
+      try {
+        unlisten = await listen<number>("quick-selector:result", (event) => {
+          const idx = event.payload;
+          const entries = clipEntriesRef.current;
+          if (idx >= 0 && idx < entries.length) {
+            const entry = entries[idx];
+            skipNextChangeRef.current = true;
+            (async () => {
+              try {
+                if (entry.text) {
+                  if (entry.html) {
+                    await writeHTML(entry.text, entry.html);
+                  } else {
+                    await writeText(entry.text);
+                  }
+                } else if (entry.html) {
+                  const stripped = entry.html.replace(/<[^>]*>/g, "");
+                  await writeHTML(stripped, entry.html);
+                } else if (entry.image) {
+                  await writeImage(entry.image.path);
+                } else if (entry.files) {
+                  await writeFiles(entry.files);
+                }
+              } catch (err) {
+                skipNextChangeRef.current = false;
+                console.error("快速选择器复制失败:", err);
+              }
+            })();
+          }
+        });
+      } catch (err) {
+        console.error("监听 quick-selector:result 失败:", err);
+      }
+    })();
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   // ===== 渲染 =====
 
   return (
@@ -473,6 +583,8 @@ function App() {
             onSetMaxClipEntries={handleSetMaxEntries}
             cleanupInterval={cleanupInterval}
             onSetCleanupInterval={handleSetCleanupInterval}
+            shortcut={shortcut}
+            onSetShortcut={handleSetShortcut}
             ready={themeReady}
           />
         )}

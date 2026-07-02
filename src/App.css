@@ -465,3 +465,88 @@ button:active {
   border-radius: 4px;
   word-break: break-all;
 }
+
+/* ===== 快速选择器独立窗口 ===== */
+.quick-selector-window {
+  width: 100%;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  padding: 8px;
+}
+
+/* ===== 快速选择器浮层（主窗口内嵌，已废弃保留兼容） ===== */
+.quick-selector-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.quick-selector-panel {
+  width: 540px;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  padding: 8px;
+}
+
+.quick-selector-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: default;
+  transition: background 0.15s;
+}
+
+.quick-selector-item:hover {
+  background: var(--color-bg);
+}
+
+.quick-selector-item.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.quick-selector-item.active .quick-selector-text {
+  color: #fff;
+}
+
+.quick-selector-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.quick-selector-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.quick-selector-tags {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.quick-selector-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  padding: 10px 0 4px;
+  opacity: 0.7;
+}

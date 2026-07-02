@@ -1,4 +1,4 @@
-import { InputNumber } from "antd";
+import { InputNumber, Input } from "antd";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -9,6 +9,8 @@ interface SettingsPageProps {
   onSetMaxClipEntries: (max: number) => void;
   cleanupInterval: number;
   onSetCleanupInterval: (seconds: number) => void;
+  shortcut: string;
+  onSetShortcut: (shortcut: string) => void;
   ready: boolean;
 }
 
@@ -25,6 +27,8 @@ function SettingsPage({
   onSetMaxClipEntries,
   cleanupInterval,
   onSetCleanupInterval,
+  shortcut,
+  onSetShortcut,
   ready,
 }: SettingsPageProps) {
   if (!ready) {
@@ -75,6 +79,16 @@ function SettingsPage({
           value={cleanupInterval}
           onChange={(v) => v !== null && onSetCleanupInterval(v)}
           style={{ width: 120 }}
+        />
+      </div>
+
+      <div className="setting-item">
+        <span className="setting-label">全局快捷键</span>
+        <Input
+          value={shortcut}
+          onChange={(e) => onSetShortcut(e.target.value)}
+          placeholder="例如 Ctrl+Alt+Q"
+          style={{ width: 220 }}
         />
       </div>
     </div>
