@@ -31,6 +31,16 @@ export function getQuickPreview(entry: ClipEntry): {
         : singleLine;
     return { text: preview, icon: entry.image ? "🖼️" : "📄", tags };
   }
+
+  // 图片优先（网页图片的 html 只是 img 标签，无预览价值）
+  if (entry.image) {
+    return {
+      text: `图片 ${entry.image.width}×${entry.image.height}`,
+      icon: "🖼️",
+      tags,
+    };
+  }
+
   if (entry.html) {
     const stripped = entry.html.replace(/<[^>]*>/g, "").trim();
     const preview =
@@ -38,13 +48,6 @@ export function getQuickPreview(entry: ClipEntry): {
         ? stripped.substring(0, 40) + "…"
         : stripped || "(空HTML)";
     return { text: preview, icon: "🌐", tags };
-  }
-  if (entry.image) {
-    return {
-      text: `图片 ${entry.image.width}×${entry.image.height}`,
-      icon: "🖼️",
-      tags,
-    };
   }
   if (entry.files) {
     const preview =

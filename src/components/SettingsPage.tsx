@@ -1,6 +1,5 @@
 import { InputNumber, Input } from "antd";
-
-type ThemeMode = "light" | "dark" | "system";
+import type { ThemeMode } from "../utils/theme";
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
