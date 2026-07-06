@@ -1,5 +1,12 @@
 import type { ClipEntry } from "../App";
 
+/** BorderBeam 流光颜色 */
+export const BEAM_COLORS = [
+  { color: "#2f54eb", percent: 0 },
+  { color: "#722ed1", percent: 44 },
+  { color: "#ff85c0", percent: 100 },
+];
+
 /** 根据 tag 标签名返回对应的 antd Tag 颜色 */
 export function tagColor(label: string): string {
   if (label.startsWith("文本")) return "blue";

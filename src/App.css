@@ -13,10 +13,16 @@
   --color-tab-hover-bg: #d0d0d0;
   --color-input-bg: #ffffff;
   --color-input-border: #ccc;
-  --color-radio-dot: #396cd8;
-  --color-radio-border: #ccc;
-  --color-radio-border-active: #396cd8;
+
   --shadow-sm: 0 2px 2px rgba(0, 0, 0, 0.2);
+
+  /* 滚动条 */
+  --scrollbar-width: 8px;
+  --scrollbar-track-bg: #f0f0f0;
+  --scrollbar-track-shadow: inset 0 0 6px rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-from: #7a99d9;
+  --scrollbar-thumb-mid: #497dbd;
+  --scrollbar-thumb-to: #1c3a94;
 }
 
 /* ===== 暗色模式变量覆盖 ===== */
@@ -33,10 +39,15 @@
   --color-tab-hover-bg: #4a4a5c;
   --color-input-bg: #2a2a3c;
   --color-input-border: #555;
-  --color-radio-dot: #7c8cf8;
-  --color-radio-border: #555;
-  --color-radio-border-active: #7c8cf8;
+
   --shadow-sm: 0 2px 2px rgba(0, 0, 0, 0.4);
+
+  /* 滚动条 */
+  --scrollbar-track-bg: #2a2a3c;
+  --scrollbar-track-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
+  --scrollbar-thumb-from: #7c8cf8;
+  --scrollbar-thumb-mid: #646cff;
+  --scrollbar-thumb-to: #535bf2;
 }
 
 /* ===== 全局 ===== */
@@ -186,60 +197,7 @@ button:active {
 .setting-label {
   font-size: 15px;
   font-weight: 500;
-}
-
-/* ===== 主题选择 radio 组 ===== */
-.theme-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  transition: color 0.2s;
-}
-
-.radio-label:has(input:checked) {
   color: var(--color-text);
-  font-weight: 500;
-}
-
-.radio-label input[type="radio"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.radio-indicator {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid var(--color-radio-border);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border-color 0.2s, background 0.2s;
-  flex-shrink: 0;
-}
-
-.radio-label input:checked + .radio-indicator {
-  border-color: var(--color-radio-border-active);
-}
-
-.radio-label input:checked + .radio-indicator::after {
-  content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-radio-dot);
 }
 
 /* ===== 剪贴板页面 ===== */
@@ -297,6 +255,12 @@ button:active {
 
 .clip-entry.expanded {
   border-color: var(--color-accent);
+}
+
+/* 收藏条目 — BorderBeam 容器 */
+.clip-entry-favorite {
+  position: relative;
+  overflow: visible;
 }
 
 /* ----- 条目头部（可点击折叠） ----- */
@@ -522,6 +486,7 @@ button:active {
   border-radius: 8px;
   cursor: default;
   transition: background 0.15s;
+  position: relative;
 }
 
 .quick-selector-item:hover {
@@ -572,4 +537,29 @@ button:active {
   color: var(--color-text-secondary);
   padding: 10px 0 4px;
   opacity: 0.7;
+}
+
+/* ===== 滚动条样式 ===== */
+.tab-content::-webkit-scrollbar,
+.quick-selector-window::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  background-color: var(--scrollbar-track-bg);
+}
+
+.tab-content::-webkit-scrollbar-track,
+.quick-selector-window::-webkit-scrollbar-track {
+  -webkit-box-shadow: var(--scrollbar-track-shadow);
+  background-color: var(--scrollbar-track-bg);
+  border-radius: 10px;
+}
+
+.tab-content::-webkit-scrollbar-thumb,
+.quick-selector-window::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-image: linear-gradient(
+    to top,
+    var(--scrollbar-thumb-from) 44%,
+    var(--scrollbar-thumb-mid) 72%,
+    var(--scrollbar-thumb-to) 86%
+  );
 }

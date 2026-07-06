@@ -3,9 +3,9 @@ import { load } from "@tauri-apps/plugin-store";
 import { listen, emit, type UnlistenFn } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Tag } from "antd";
+import { Tag, BorderBeam } from "antd";
 import type { ClipEntry } from "../App";
-import { tagColor, getQuickPreview } from "../utils/clipboardPreview";
+import { tagColor, getQuickPreview, BEAM_COLORS } from "../utils/clipboardPreview";
 import { type ThemeMode, resolveIsDark, applyTheme } from "../utils/theme";
 import "../App.css";
 
@@ -217,12 +217,11 @@ function QuickSelectorApp() {
         entries.map((entry, i) => {
           const p = getQuickPreview(entry);
           const isActive = i === highlightIndex;
-          return (
-            <div
-              key={entry.id}
-              data-index={i}
-              className={`quick-selector-item ${isActive ? "active" : ""}`}
-            >
+
+          const itemClass = `quick-selector-item ${isActive ? "active" : ""}`;
+
+          const body = (
+            <>
               <button
                 className="quick-selector-favorite"
                 onClick={(e) => {
@@ -251,6 +250,18 @@ function QuickSelectorApp() {
                   ))}
                 </span>
               )}
+            </>
+          );
+
+          return entry.favorite ? (
+            <BorderBeam key={entry.id} color={BEAM_COLORS}>
+              <div data-index={i} className={itemClass}>
+                {body}
+              </div>
+            </BorderBeam>
+          ) : (
+            <div key={entry.id} data-index={i} className={itemClass}>
+              {body}
             </div>
           );
         })

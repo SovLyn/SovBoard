@@ -1,4 +1,4 @@
-import { InputNumber, Input } from "antd";
+import { InputNumber, Input, Radio } from "antd";
 import type { ThemeMode } from "../utils/theme";
 
 interface SettingsPageProps {
@@ -12,12 +12,6 @@ interface SettingsPageProps {
   onSetShortcut: (shortcut: string) => void;
   ready: boolean;
 }
-
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: "light", label: "亮色" },
-  { value: "dark", label: "暗色" },
-  { value: "system", label: "遵循系统" },
-];
 
 function SettingsPage({
   themeMode,
@@ -36,30 +30,24 @@ function SettingsPage({
 
   return (
     <div className="page settings-page">
-      <h2>设置</h2>
-
       <div className="setting-item">
         <span className="setting-label">主题</span>
-        <div className="theme-options">
-          {THEME_OPTIONS.map((opt) => (
-            <label key={opt.value} className="radio-label">
-              <input
-                type="radio"
-                name="themeMode"
-                value={opt.value}
-                checked={themeMode === opt.value}
-                onChange={() => onSetThemeMode(opt.value)}
-              />
-              <span className="radio-indicator" />
-              {opt.label}
-            </label>
-          ))}
-        </div>
+        <Radio.Group
+          value={themeMode}
+          onChange={(e) => onSetThemeMode(e.target.value)}
+          optionType="button"
+          buttonStyle="solid"
+        >
+          <Radio.Button value="light">亮色</Radio.Button>
+          <Radio.Button value="dark">暗色</Radio.Button>
+          <Radio.Button value="system">遵循系统</Radio.Button>
+        </Radio.Group>
       </div>
 
       <div className="setting-item">
         <span className="setting-label">最大保存条数</span>
         <InputNumber
+          variant="filled"
           min={8}
           max={1024}
           step={8}
@@ -72,6 +60,7 @@ function SettingsPage({
       <div className="setting-item">
         <span className="setting-label">清理间隔（秒）</span>
         <InputNumber
+          variant="filled"
           min={10}
           max={3600}
           step={10}

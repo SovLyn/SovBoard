@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { Popconfirm, Tag, Tooltip } from "antd";
+import { Popconfirm, Tag, Tooltip, BorderBeam } from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ClipEntry } from "../App";
+import { BEAM_COLORS } from "../utils/clipboardPreview";
 
 interface ClipboardPageProps {
   entries: ClipEntry[];
@@ -134,7 +135,6 @@ function ClipboardPage({
   return (
     <div className="page clipboard-page">
       <div className="clipboard-header">
-        <h2>剪贴板历史</h2>
         <Popconfirm
           title="确定要清空全部剪贴板历史吗？"
           onConfirm={onClear}
@@ -150,11 +150,10 @@ function ClipboardPage({
           const expanded = expandedId === entry.id;
           const preview = previews.find((p) => p.id === entry.id)!;
 
-          return (
-            <div
-              key={entry.id}
-              className={`clip-entry ${expanded ? "expanded" : ""}`}
-            >
+          const clipClass = `clip-entry ${expanded ? "expanded" : ""} ${entry.favorite ? "clip-entry-favorite" : ""}`;
+
+          const body = (
+            <>
               {/* ---- 头部（折叠切换） ---- */}
               <div
                 className="clip-entry-header"
@@ -280,6 +279,16 @@ function ClipboardPage({
                   )}
                 </div>
               )}
+            </>
+          );
+
+          return entry.favorite ? (
+            <BorderBeam key={entry.id} color={BEAM_COLORS}>
+              <div className={clipClass}>{body}</div>
+            </BorderBeam>
+          ) : (
+            <div key={entry.id} className={clipClass}>
+              {body}
             </div>
           );
         })}

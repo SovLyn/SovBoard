@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { load } from "@tauri-apps/plugin-store";
 import { type ThemeMode, resolveIsDark, applyTheme } from "./utils/theme";
-import { notification } from "antd";
+import { App as AntdApp } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import {
   startListening,
@@ -18,7 +18,7 @@ import {
   unregister,
   type ShortcutEvent,
 } from "@tauri-apps/plugin-global-shortcut";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listen, emit, type UnlistenFn } from "@tauri-apps/api/event";
 import ClipboardPage from "./components/ClipboardPage";
 import SettingsPage from "./components/SettingsPage";
 import "./App.css";
@@ -133,6 +133,7 @@ async function persistClipboard(
 // ========== App 组件 ==========
 
 function App() {
+  const { notification } = AntdApp.useApp();
   const [activeTab, setActiveTab] = useState<Tab>("clipboard");
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
@@ -427,6 +428,8 @@ function App() {
         e.id === id ? { ...e, favorite: !e.favorite } : e,
       ),
     );
+    // 通知 QuickSelector 窗口同步
+    emit("quick-selector:entries-updated", null).catch(() => {});
   }, []);
 
   const handleClear = useCallback(async () => {
@@ -517,7 +520,7 @@ function App() {
         const message =
           err instanceof Error ? err.message : String(err);
         notification.error({
-          message: "全局快捷键注册失败",
+          title: "全局快捷键注册失败",
           description: `${current} 已被占用或不被系统支持。\n${message}`,
           placement: "bottomRight",
         });
@@ -530,6 +533,38 @@ function App() {
       unregister(current).catch(() => {});
     };
   }, [shortcut, clipReady]);
+
+  // ===== QuickSelector 收藏同步监听 =====
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    (async () => {
+      try {
+        unlisten = await listen("quick-selector:favorite-changed", async () => {
+          // QuickSelector 修改了 store，从 store 重新加载
+          try {
+            const store = await load(CLIPBOARD_STORE, {
+              autoSave: false,
+              defaults: {},
+            });
+            const data = await store.get<ClipboardStore>(CLIPBOARD_DATA_KEY);
+            if (data) {
+              setClipEntries(data.entries);
+              nextIdRef.current = data.nextId;
+            }
+          } catch (err) {
+            console.error("从 store 同步收藏状态失败:", err);
+          }
+        });
+      } catch (err) {
+        console.error("监听 quick-selector:favorite-changed 失败:", err);
+      }
+    })();
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   // ===== QuickSelector 结果监听 =====
   useEffect(() => {

@@ -1,4 +1,5 @@
 import ReactDOM from "react-dom/client";
+import { ConfigProvider, App as AntdApp } from "antd";
 import App from "./App";
 import QuickSelectorApp from "./components/QuickSelectorApp";
 
@@ -7,5 +8,34 @@ const params = new URLSearchParams(window.location.search);
 const isQuickSelector = params.get("window") === "quick-selector";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  isQuickSelector ? <QuickSelectorApp /> : <App />,
+  isQuickSelector ? (
+    <QuickSelectorApp />
+  ) : (
+    <ConfigProvider
+      theme={{
+        token: {
+          colorFillTertiary: "var(--color-accent-hover)",
+        },
+        components: {
+          InputNumber: {
+            filledHandleBg: "var(--color-accent)",
+            handleHoverColor: "var(--color-accent-hover)",
+          },
+          Input: {
+            activeBorderColor: "var(--color-accent)",
+            hoverBorderColor: "var(--color-accent-hover)",
+          },
+          Radio: {
+            buttonSolidCheckedBg: "var(--color-accent)",
+            buttonSolidCheckedHoverBg: "var(--color-accent-hover)",
+            buttonSolidCheckedActiveBg: "var(--color-accent-hover)",
+          },
+        },
+      }}
+    >
+      <AntdApp>
+        <App />
+      </AntdApp>
+    </ConfigProvider>
+  ),
 );
