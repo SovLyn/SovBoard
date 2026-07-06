@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { load } from "@tauri-apps/plugin-store";
+import { type ThemeMode, resolveIsDark, applyTheme } from "./utils/theme";
+import { notification } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import {
   startListening,
@@ -26,6 +28,7 @@ import "./App.css";
 export interface ClipEntry {
   id: number;
   timestamp: number;
+  favorite?: boolean;
   text?: string;
   html?: string;
   rtf?: string;
@@ -47,7 +50,6 @@ interface CleanupResult {
 }
 
 type Tab = "clipboard" | "settings";
-type ThemeMode = "light" | "dark" | "system";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "clipboard", label: "剪贴板" },
@@ -67,26 +69,6 @@ const DEFAULT_MAX_ENTRIES = 32;
 const DEFAULT_CLEANUP_INTERVAL = 60;
 
 // ========== 工具函数 ==========
-
-function systemPrefersDark(): boolean {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function resolveIsDark(mode: ThemeMode): boolean {
-  if (mode === "system") return systemPrefersDark();
-  return mode === "dark";
-}
-
-function applyTheme(dark: boolean) {
-  const root = document.documentElement;
-  if (dark) {
-    root.classList.add("theme-dark");
-    root.classList.remove("theme-light");
-  } else {
-    root.classList.add("theme-light");
-    root.classList.remove("theme-dark");
-  }
-}
 
 function isSameEntry(a: ClipEntry, b: ClipEntry): boolean {
   if (a.text !== b.text) return false;
@@ -111,6 +93,7 @@ function buildEntry(
   const entry: ClipEntry = {
     id: nextIdRef.current++,
     timestamp: Date.now(),
+    favorite: false,
   };
   if (result.text) entry.text = result.text.value;
   if (result.html) entry.html = result.html.value;
@@ -323,7 +306,12 @@ function App() {
                 );
                 return prev;
               }
-              return [entry, ...prev].slice(0, maxEntriesRef.current);
+              const combined = [entry, ...prev];
+              const favs = combined.filter((e) => e.favorite);
+              const nonFavs = combined.filter((e) => !e.favorite);
+              const max = maxEntriesRef.current;
+              const keepNonFavs = Math.max(0, max - favs.length);
+              return [...favs, ...nonFavs.slice(0, keepNonFavs)];
             });
           },
           { saveImagePath },
@@ -370,7 +358,9 @@ function App() {
       // 删除前端"脏条目"（条目存在但图片文件已丢失）
       if (result.stale_entry_ids.length > 0) {
         const staleSet = new Set(result.stale_entry_ids);
-        setClipEntries((prev) => prev.filter((e) => !staleSet.has(e.id)));
+        setClipEntries((prev) =>
+          prev.filter((e) => !staleSet.has(e.id)),
+        );
       }
     } catch (err) {
       console.error("清理孤儿图片失败:", err);
@@ -408,11 +398,11 @@ function App() {
         } else {
           await writeText(entry.text);
         }
+      } else if (entry.image) {
+        await writeImage(entry.image.path);
       } else if (entry.html) {
         const stripped = entry.html.replace(/<[^>]*>/g, "");
         await writeHTML(stripped, entry.html);
-      } else if (entry.image) {
-        await writeImage(entry.image.path);
       } else if (entry.files) {
         await writeFiles(entry.files);
       }
@@ -423,7 +413,20 @@ function App() {
   }, []);
 
   const handleDelete = useCallback(async (id: number) => {
-    setClipEntries((prev) => prev.filter((e) => e.id !== id));
+    // 收藏项不允许删除
+    setClipEntries((prev) => {
+      const entry = prev.find((e) => e.id === id);
+      if (entry?.favorite) return prev;
+      return prev.filter((e) => e.id !== id);
+    });
+  }, []);
+
+  const handleToggleFavorite = useCallback(async (id: number) => {
+    setClipEntries((prev) =>
+      prev.map((e) =>
+        e.id === id ? { ...e, favorite: !e.favorite } : e,
+      ),
+    );
   }, []);
 
   const handleClear = useCallback(async () => {
@@ -448,7 +451,12 @@ function App() {
     }
 
     // trim 现有条目
-    setClipEntries((prev) => prev.slice(0, clamped));
+    setClipEntries((prev) => {
+      const favs = prev.filter((e) => e.favorite);
+      const nonFavs = prev.filter((e) => !e.favorite);
+      const keepNonFavs = Math.max(0, clamped - favs.length);
+      return [...favs, ...nonFavs.slice(0, keepNonFavs)];
+    });
   }, []);
 
   const handleSetCleanupInterval = useCallback(async (seconds: number) => {
@@ -506,7 +514,13 @@ function App() {
           }
         });
       } catch (err) {
-        console.error(`注册全局快捷键 ${current} 失败:`, err);
+        const message =
+          err instanceof Error ? err.message : String(err);
+        notification.error({
+          message: "全局快捷键注册失败",
+          description: `${current} 已被占用或不被系统支持。\n${message}`,
+          placement: "bottomRight",
+        });
       }
     }
 
@@ -537,11 +551,11 @@ function App() {
                   } else {
                     await writeText(entry.text);
                   }
+                } else if (entry.image) {
+                  await writeImage(entry.image.path);
                 } else if (entry.html) {
                   const stripped = entry.html.replace(/<[^>]*>/g, "");
                   await writeHTML(stripped, entry.html);
-                } else if (entry.image) {
-                  await writeImage(entry.image.path);
                 } else if (entry.files) {
                   await writeFiles(entry.files);
                 }
@@ -572,6 +586,7 @@ function App() {
             entries={clipEntries}
             onCopy={handleCopy}
             onDelete={handleDelete}
+            onToggleFavorite={handleToggleFavorite}
             onClear={handleClear}
           />
         )}

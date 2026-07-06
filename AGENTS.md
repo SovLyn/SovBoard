@@ -260,3 +260,39 @@ docs: 补充架构说明和开发命令
 - **新增样式**：`.quick-selector-window` 独立窗口专用样式
 - **交互增强**：条目全部显示（移除 8 条限制）、`scrollIntoView` 自动跟随高亮项、Esc 键关闭窗口
 - **验证**：`cargo check` + `pnpm build` 均通过
+
+### Session 2026-07-06 — 快捷键注册通知 + 收藏功能 + 系统托盘 & 窗口状态记忆
+**任务一：快捷键注册失败通知**
+- `App.tsx`：导入 `notification` from `"antd"`，快捷键注册失败的 `catch` 块中弹出 `notification.error` 提示用户
+
+**任务二：剪贴板收藏功能**
+- `App.tsx`：`ClipEntry` 接口新增 `favorite?: boolean` 字段，新条目默认 `false`
+- `App.tsx`：`handleDelete` 拒绝删除收藏项；新增 `handleToggleFavorite` 切换收藏状态
+- `App.tsx`：`runCleanup` 孤儿图片清理跳过收藏项（`!staleSet.has(e.id) || e.favorite`）
+- `ClipboardPage.tsx`：新增 `onToggleFavorite` prop；列表按收藏优先排序（收藏项置顶，各自按时间倒序）
+- `ClipboardPage.tsx`：每条目头部新增 ⭐/☆ 收藏按钮；收藏项的删除按钮变为 disabled + Tooltip 提示
+- `QuickSelectorApp.tsx`：数据读取后按收藏优先排序；收藏项显示 ⭐ emoji 标记
+- `App.css`：新增 `.btn-favorite`、`.btn-disabled`、`.quick-selector-favorite` 样式
+- `src/utils/clipboardPreview.ts`：无需修改（已由 `ClipboardPage` 内部处理）
+
+**任务三：系统托盘 + 窗口状态记忆**
+- `Cargo.toml`：添加 `tauri-plugin-window-state = "2"`；tauri features 添加 `tray-icon`、`image-png`
+- `capabilities/default.json`：添加 `window-state:default` 权限
+- `lib.rs`：注册 `tauri_plugin_window_state` plugin
+- `lib.rs`：在 `setup()` 中创建系统托盘（`TrayIconBuilder`），菜单含「显示主窗口」和「退出」；右键菜单/左键单击均可显示窗口
+- `lib.rs`：拦截主窗口 `CloseRequested` 事件（`api.prevent_close()` + `hide()`），关闭窗口时最小化到托盘而非退出
+- window-state 插件自动保存/恢复窗口位置和大小
+
+- **验证**：`cargo check` + `pnpm build` 均通过
+
+### Session 2026-07-06 — QuickSelector 主题同步修复
+- **问题**：QuickSelector 独立窗口配色不跟随主窗口亮色/暗色主题变化
+- **修复**：抽取 `src/utils/theme.ts`（`ThemeMode`、`systemPrefersDark`、`resolveIsDark`、`applyTheme`）
+- **修复**：`App.tsx` 和 `SettingsPage.tsx` 改为从 `utils/theme` 导入类型和工具函数
+- **修复**：`QuickSelectorApp.tsx` 新增 `fetchTheme` 回调，挂载时读取 `settings.json` 主题配置并应用 CSS class；接收 `entries-updated` 事件时同步刷新主题；监听 `prefers-color-scheme` 系统主题变化
+- **验证**：`tsc --noEmit` + `pnpm build` 均通过
+
+### Session 2026-07-06 — 修复 QuickSelector 启动时意外显示
+- **问题**：window-state 插件启动时恢复窗口状态，导致 QuickSelector 窗口在应用打开后一并弹出
+- **修复**：`lib.rs` 中 window-state 插件注册时添加 `.with_denylist(&["quick-selector"])`，排除 QS 窗口的状态追踪
+- **验证**：`cargo check` 通过

@@ -1,14 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { load } from "@tauri-apps/plugin-store";
 import { listen, emit, type UnlistenFn } from "@tauri-apps/api/event";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Tag } from "antd";
 import type { ClipEntry } from "../App";
 import { tagColor, getQuickPreview } from "../utils/clipboardPreview";
+import { type ThemeMode, resolveIsDark, applyTheme } from "../utils/theme";
 import "../App.css";
 
 // ========== 常量 ==========
 
+const SETTINGS_STORE = "settings.json";
+const THEME_MODE_KEY = "themeMode";
+const LEGACY_DARK_MODE_KEY = "darkMode";
 const CLIPBOARD_STORE = "clipboard.json";
 const CLIPBOARD_DATA_KEY = "clipboardData";
 
@@ -46,22 +51,74 @@ function QuickSelectorApp() {
       });
       const data = await store.get<ClipboardStore>(CLIPBOARD_DATA_KEY);
       const list = data?.entries ?? [];
-      setEntries(list);
+      // 收藏项置顶
+      const sorted = [...list].sort(
+        (a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0),
+      );
+      setEntries(sorted);
       setHighlightIndex(0);
     } catch (err) {
       console.error("[QS-App] 从 store 读取失败:", err);
     }
   }, []);
 
+  // 切换收藏
+  const handleToggleFavorite = useCallback(
+    async (id: number) => {
+      try {
+        const store = await load(CLIPBOARD_STORE, {
+          autoSave: false,
+          defaults: {},
+        });
+        const data = await store.get<ClipboardStore>(CLIPBOARD_DATA_KEY);
+        if (!data) return;
+        const updated = data.entries.map((e) =>
+          e.id === id ? { ...e, favorite: !e.favorite } : e,
+        );
+        await store.set(CLIPBOARD_DATA_KEY, { ...data, entries: updated });
+        await store.save();
+        // 通知主窗口同步
+        emit("quick-selector:favorite-changed", null).catch(() => {});
+        // 刷新本窗口列表
+        await fetchFromStore();
+      } catch (err) {
+        console.error("[QS-App] 切换收藏失败:", err);
+      }
+    },
+    [fetchFromStore],
+  );
+
   useEffect(() => {
     fetchFromStore();
   }, [fetchFromStore]);
+
+  // ---- 主题同步 ----
+  const fetchTheme = useCallback(async () => {
+    try {
+      const store = await load(SETTINGS_STORE, {
+        autoSave: false,
+        defaults: {},
+      });
+      let mode: ThemeMode = "light";
+      const saved = await store.get<string>(THEME_MODE_KEY);
+      if (saved === "light" || saved === "dark" || saved === "system") {
+        mode = saved;
+      } else {
+        const legacy = await store.get<boolean>(LEGACY_DARK_MODE_KEY);
+        mode = legacy ? "dark" : "light";
+      }
+      applyTheme(resolveIsDark(mode));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
     (async () => {
       try {
         unlisten = await listen("quick-selector:entries-updated", () => {
+          fetchTheme();
           fetchFromStore();
         });
       } catch (err) {
@@ -71,7 +128,22 @@ function QuickSelectorApp() {
     return () => {
       unlisten?.();
     };
-  }, [fetchFromStore]);
+  }, [fetchFromStore, fetchTheme]);
+
+  // 挂载时读取主题
+  useEffect(() => {
+    fetchTheme();
+  }, [fetchTheme]);
+
+  // 系统主题变化监听
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => {
+      fetchTheme();
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [fetchTheme]);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -151,7 +223,24 @@ function QuickSelectorApp() {
               data-index={i}
               className={`quick-selector-item ${isActive ? "active" : ""}`}
             >
-              <span className="quick-selector-icon">{p.icon}</span>
+              <button
+                className="quick-selector-favorite"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleFavorite(entry.id);
+                }}
+                title={entry.favorite ? "取消收藏" : "收藏"}
+              >
+                {entry.favorite ? "⭐" : "☆"}
+              </button>
+              {entry.image && (
+                <img
+                  src={convertFileSrc(entry.image.path)}
+                  alt=""
+                  className="quick-selector-thumb"
+                  style={{ height: 24, width: "auto", borderRadius: 2, flexShrink: 0 }}
+                />
+              )}
               <span className="quick-selector-text">{p.text}</span>
               {p.tags.length > 0 && (
                 <span className="quick-selector-tags">

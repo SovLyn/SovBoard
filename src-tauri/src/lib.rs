@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::WebviewUrl;
+use tauri::image::Image;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 // ========== QuickSelector 窗口状态 ==========
 
@@ -229,11 +232,16 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_x::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["quick-selector"])
+                .build(),
+        )
         .manage(QuickSelectorState {
             entries_json: Mutex::new("[]".into()),
         })
         .setup(|app| {
-            // 预创建 QuickSelector 窗口（隐藏，按快捷键时 show/hide 复用）
+            // ---- 预创建 QuickSelector 窗口 ----
             let url = get_quick_selector_url(&app.handle());
             let _qs_window = tauri::WebviewWindowBuilder::new(app, "quick-selector", url)
                 .title("QuickSelector")
@@ -245,6 +253,68 @@ pub fn run() {
                 .visible(false)
                 .build()
                 .expect("预创建 QuickSelector 窗口失败");
+
+            // ---- 系统托盘 ----
+            let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                .expect("加载托盘图标失败");
+
+            let show_item = MenuItemBuilder::with_id("show", "显示主窗口")
+                .build(app)
+                .expect("创建托盘菜单项失败");
+            let quit_item = MenuItemBuilder::with_id("quit", "退出")
+                .build(app)
+                .expect("创建托盘菜单项失败");
+            let menu = MenuBuilder::new(app)
+                .items(&[&show_item, &quit_item])
+                .build()
+                .expect("创建托盘菜单失败");
+
+            let _tray = TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .tooltip("SovBoard 剪贴板管理")
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)
+                .expect("创建托盘图标失败");
+
+            // ---- 拦截关闭事件：隐藏窗口而不是退出 ----
+            if let Some(window) = app.get_webview_window("main") {
+                let win_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win_clone.hide();
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

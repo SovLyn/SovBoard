@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Popconfirm, Tag } from "antd";
+import { Popconfirm, Tag, Tooltip } from "antd";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ClipEntry } from "../App";
 
@@ -7,6 +7,7 @@ interface ClipboardPageProps {
   entries: ClipEntry[];
   onCopy: (entry: ClipEntry) => void;
   onDelete: (id: number) => void;
+  onToggleFavorite: (id: number) => void;
   onClear: () => void;
 }
 
@@ -54,7 +55,13 @@ function getPreview(entry: ClipEntry): PreviewInfo {
     return { text: preview, icon: entry.image ? "🖼️" : "📄", tags };
   }
 
-  // html（无 text）
+  // 图片（无 text 时优先于 html——网页图片的 html 只是 img 标签，无实际内容）
+  if (entry.image) {
+    const size = `${entry.image.width}×${entry.image.height}`;
+    return { text: `图片 ${size}`, icon: "🖼️", tags };
+  }
+
+  // html（无 text 且无图片）
   if (entry.html) {
     const stripped = entry.html.replace(/<[^>]*>/g, "").trim();
     const preview =
@@ -62,12 +69,6 @@ function getPreview(entry: ClipEntry): PreviewInfo {
         ? stripped.substring(0, 40) + "…"
         : stripped || "(空HTML)";
     return { text: preview, icon: "🌐", tags };
-  }
-
-  // 图片
-  if (entry.image) {
-    const size = `${entry.image.width}×${entry.image.height}`;
-    return { text: `图片 ${size}`, icon: "🖼️", tags };
   }
 
   // 文件
@@ -96,13 +97,21 @@ function ClipboardPage({
   entries,
   onCopy,
   onDelete,
+  onToggleFavorite,
   onClear,
 }: ClipboardPageProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
+  // 排序：收藏项置顶，各自按时间倒序
+  const sortedEntries = useMemo(() => {
+    const fav = entries.filter((e) => e.favorite);
+    const nonFav = entries.filter((e) => !e.favorite);
+    return [...fav, ...nonFav];
+  }, [entries]);
+
   const previews = useMemo(
-    () => entries.map((e) => ({ id: e.id, ...getPreview(e) })),
-    [entries],
+    () => sortedEntries.map((e) => ({ id: e.id, ...getPreview(e) })),
+    [sortedEntries],
   );
 
   const toggleExpand = (id: number) => {
@@ -137,7 +146,7 @@ function ClipboardPage({
       </div>
 
       <div className="clipboard-list">
-        {entries.map((entry) => {
+        {sortedEntries.map((entry) => {
           const expanded = expandedId === entry.id;
           const preview = previews.find((p) => p.id === entry.id)!;
 
@@ -154,8 +163,26 @@ function ClipboardPage({
                 <span className="clip-expand-arrow">
                   {expanded ? "▾" : "▸"}
                 </span>
-                <span className="clip-entry-icon">{preview.icon}</span>
+                {entry.image && (
+                  <img
+                    src={convertFileSrc(entry.image.path)}
+                    alt=""
+                    className="clip-entry-thumb"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ height: 28, width: "auto", borderRadius: 3 }}
+                  />
+                )}
                 <span className="clip-entry-preview">{preview.text}</span>
+                <button
+                  className="btn-favorite"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(entry.id);
+                  }}
+                  title={entry.favorite ? "取消收藏" : "收藏"}
+                >
+                  {entry.favorite ? "⭐" : "☆"}
+                </button>
                 {preview.tags.length > 0 && (
                   <span className="clip-entry-tags">
                     {preview.tags.map((t) => (
@@ -182,6 +209,17 @@ function ClipboardPage({
                   >
                     复制
                   </button>
+                  {entry.favorite ? (
+                    <Tooltip title="收藏项不可删除">
+                      <button
+                        className="btn-action btn-delete btn-disabled"
+                        onClick={(e) => e.stopPropagation()}
+                        disabled
+                      >
+                        删除
+                      </button>
+                    </Tooltip>
+                  ) : (
                   <Popconfirm
                     title="确定删除该条记录？"
                     onConfirm={() => onDelete(entry.id)}
@@ -195,6 +233,7 @@ function ClipboardPage({
                       删除
                     </button>
                   </Popconfirm>
+                  )}
                 </div>
               </div>
 
