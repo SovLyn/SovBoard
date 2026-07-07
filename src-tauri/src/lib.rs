@@ -272,7 +272,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(icon)
                 .menu(&menu)
-                .tooltip("SovBoard 剪贴板管理")
+                .tooltip("SovBoard")
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
                         "show" => {

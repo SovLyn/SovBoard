@@ -296,3 +296,21 @@ docs: 补充架构说明和开发命令
 - **问题**：window-state 插件启动时恢复窗口状态，导致 QuickSelector 窗口在应用打开后一并弹出
 - **修复**：`lib.rs` 中 window-state 插件注册时添加 `.with_denylist(&["quick-selector"])`，排除 QS 窗口的状态追踪
 - **验证**：`cargo check` 通过
+
+### Session 2026-07-07 — 全局快捷键设置改为按键捕捉
+- **SettingsPage.tsx**：替换文本 `Input` 为按键捕捉模式
+  - 点击输入框进入捕捉状态（`onFocus`），失去焦点/Esc 退出
+  - `onKeyDown` 中实时收集 `e.ctrlKey`/`e.altKey`/`e.shiftKey` 修饰键状态
+  - 非字母/数字键弹出 `notification.warning("无效按键")` 并退出
+  - 没有修饰键时按字母/数字键弹出 `notification.warning("无效快捷键")` 并退出
+  - 成功捕捉后按 Ctrl→Alt→Shift→Key 排序构造 `Ctrl+Alt+Q` 格式字符串，调用 `onSetShortcut`
+  - 捕捉中 `readOnly` 防止文本输入，实时显示 `Ctrl+Alt+...` 预览
+- **App.css**：新增 `.shortcut-capturing` 样式（accent 边框 + 发光阴影 + 背景高亮 + 隐藏光标）
+- **验证**：`tsc --noEmit` 编译通过
+
+### Session 2026-07-07 — 应用图标替换为 galaxy.svg
+- 将 `index.html` + `dist/index.html` 的 favicon 引用从 `/vite.svg` 改为 `/galaxy.svg`
+- 删除 `public/tauri.svg`、`public/vite.svg`、`dist/tauri.svg`、`dist/vite.svg`
+- 安装 `@resvg/resvg-js` v2.6.2（devDependencies），编写 `convert_icons.cjs` 脚本
+- 将 `src-tauri/icons/` 下全部 16 个图标文件（PNG/ICO/ICNS）替换为基于 `galaxy.svg` 渲染的新图标
+- **验证**：图标生成成功，共 14 个 PNG + 1 个 ICO + 1 个 ICNS
