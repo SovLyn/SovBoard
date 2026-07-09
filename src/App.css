@@ -763,3 +763,33 @@ button:active {
   color: var(--color-text-secondary);
   margin-top: 12px;
 }
+
+/* ===== antd 暗色模式覆盖（Input / InputNumber filled） ===== */
+.theme-dark .ant-input-filled,
+.theme-dark .ant-input-number-filled {
+  color: #f6f6f6;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #555;
+}
+
+.theme-dark .ant-input-filled:hover,
+.theme-dark .ant-input-number-filled:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #777;
+}
+
+.theme-dark .ant-input-filled:focus,
+.theme-dark .ant-input-filled.ant-input-focused,
+.theme-dark .ant-input-number-filled.ant-input-number-focused {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #7c8cf8;
+}
+
+.theme-dark .ant-input-filled::placeholder,
+.theme-dark .ant-input-number-filled .ant-input-number-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.theme-dark .ant-input-number-filled .ant-input-number-input {
+  color: #f6f6f6;
+}
