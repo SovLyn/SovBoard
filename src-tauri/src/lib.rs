@@ -22,25 +22,19 @@ struct QuickSelectorState {
 
 // ========== 清理命令相关类型 ==========
 
-/// 前端传来的图片条目（只传 id + 图片路径）
 #[derive(Debug, Deserialize)]
 struct ImageEntry {
     id: u64,
     path: String,
 }
 
-/// 清理结果，返回给前端
 #[derive(Debug, Serialize)]
 struct CleanupResult {
-    /// 被删除的孤儿图片文件路径
     removed_files: Vec<String>,
-    /// 条目存在但对应图片文件已丢失的条目 ID（前端应删除这些条目）
     stale_entry_ids: Vec<u64>,
-    /// 删除过程中遇到的错误
     errors: Vec<String>,
 }
 
-/// 被认为是图片的扩展名
 const IMAGE_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "bmp", "gif", "webp", "tiff", "tif", "svg", "ico", "avif",
 ];
@@ -54,7 +48,6 @@ fn is_image_file(path: &Path) -> bool {
 
 // ========== Tauri commands ==========
 
-/// 清理孤立的剪贴板图片文件。
 #[tauri::command]
 fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, String> {
     let mut removed_files: Vec<String> = Vec::new();
@@ -75,16 +68,10 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
     let scan_dir = match entries.first() {
         Some(first) => match Path::new(&first.path).parent() {
             Some(parent) if parent.as_os_str().len() > 0 => parent.to_path_buf(),
-            _ => {
-                return Err("无法从条目路径中推断图片保存目录".into());
-            }
+            _ => return Err("无法从条目路径中推断图片保存目录".into()),
         },
         None => {
-            return Ok(CleanupResult {
-                removed_files,
-                stale_entry_ids,
-                errors,
-            });
+            return Ok(CleanupResult { removed_files, stale_entry_ids, errors });
         }
     };
 
@@ -94,11 +81,7 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
                 stale_entry_ids.push(entry.id);
             }
         }
-        return Ok(CleanupResult {
-            removed_files,
-            stale_entry_ids,
-            errors,
-        });
+        return Ok(CleanupResult { removed_files, stale_entry_ids, errors });
     }
 
     match fs::read_dir(&scan_dir) {
@@ -106,104 +89,53 @@ fn cleanup_orphan_images(entries: Vec<ImageEntry>) -> Result<CleanupResult, Stri
             for dir_entry in dir_entries {
                 let dir_entry = match dir_entry {
                     Ok(de) => de,
-                    Err(e) => {
-                        errors.push(format!("读取目录条目失败: {}", e));
-                        continue;
-                    }
+                    Err(e) => { errors.push(format!("读取目录条目失败: {}", e)); continue; }
                 };
-
                 let file_path = dir_entry.path();
+                if !file_path.is_file() || !is_image_file(&file_path) { continue; }
 
-                if !file_path.is_file() {
-                    continue;
-                }
-
-                if !is_image_file(&file_path) {
-                    continue;
-                }
-
-                let canonical = file_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| file_path.clone());
+                let canonical = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
                 let canonical_str = canonical.to_string_lossy().to_string();
 
                 if !known_paths.contains(&canonical_str) {
                     match fs::remove_file(&file_path) {
-                        Ok(()) => {
-                            removed_files.push(file_path.to_string_lossy().to_string());
-                        }
-                        Err(e) => {
-                            errors.push(format!(
-                                "删除孤儿文件 {} 失败: {}",
-                                file_path.display(),
-                                e
-                            ));
-                        }
+                        Ok(()) => { removed_files.push(file_path.to_string_lossy().to_string()); }
+                        Err(e) => { errors.push(format!("删除孤儿文件 {} 失败: {}", file_path.display(), e)); }
                     }
                 }
             }
         }
-        Err(e) => {
-            errors.push(format!("扫描图片目录 {} 失败: {}", scan_dir.display(), e));
-        }
+        Err(e) => { errors.push(format!("扫描图片目录 {} 失败: {}", scan_dir.display(), e)); }
     }
 
     for entry in &entries {
-        if !Path::new(&entry.path).exists() {
-            stale_entry_ids.push(entry.id);
-        }
+        if !Path::new(&entry.path).exists() { stale_entry_ids.push(entry.id); }
     }
 
-    Ok(CleanupResult {
-        removed_files,
-        stale_entry_ids,
-        errors,
-    })
+    Ok(CleanupResult { removed_files, stale_entry_ids, errors })
 }
 
-/// 构建 QuickSelector 窗口的 URL。
-/// 开发模式直连 Vite dev server，生产模式用 App 相对路径。
 fn get_quick_selector_url(_app: &tauri::AppHandle) -> WebviewUrl {
     if cfg!(debug_assertions) {
-        WebviewUrl::External(
-            "http://localhost:1420/?window=quick-selector"
-                .parse()
-                .unwrap(),
-        )
+        WebviewUrl::External("http://localhost:1420/?window=quick-selector".parse().unwrap())
     } else {
         WebviewUrl::App("index.html?window=quick-selector".into())
     }
 }
 
-/// 显示 QuickSelector 窗口（预创建的隐藏窗口，只做 show + 发送数据）。
 #[tauri::command]
 fn show_quick_selector(app: tauri::AppHandle, entries_json: String) -> Result<(), String> {
-    // 存储条目到全局状态
     let state = app.state::<QuickSelectorState>();
     *state.entries_json.lock().map_err(|e| e.to_string())? = entries_json;
-
-    // 获取预创建的窗口
-    let window = app
-        .get_webview_window("quick-selector")
-        .ok_or_else(|| "quick-selector 窗口未找到".to_string())?;
-
-    // 先居中
+    let window = app.get_webview_window("quick-selector").ok_or_else(|| "quick-selector 窗口未找到".to_string())?;
     window.center().map_err(|e| e.to_string())?;
-
-    // 通知 QS 窗口更新数据
     let json = state.entries_json.lock().map_err(|e| e.to_string())?.clone();
-    window
-        .emit("quick-selector:entries-updated", json)
-        .map_err(|e| e.to_string())?;
-
-    // 显示窗口
+    window.emit("quick-selector:entries-updated", json).map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
-
     Ok(())
 }
 
-/// 隐藏 QuickSelector 窗口（不销毁，下次复用）。
 #[tauri::command]
 fn hide_quick_selector(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("quick-selector") {
@@ -214,31 +146,22 @@ fn hide_quick_selector(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// QuickSelector 窗口调用此命令获取条目数据。
 #[tauri::command]
 fn get_quick_selector_entries(app: tauri::AppHandle) -> Result<String, String> {
     let state = app.state::<QuickSelectorState>();
-    let json = state
-        .entries_json
-        .lock()
-        .map_err(|e| e.to_string())?
-        .clone();
-    Ok(json)
+    state.entries_json.lock().map_err(|e| e.to_string()).map(|j| j.clone())
 }
 
 // ========== P2P commands ==========
 
-/// 对等节点摘要（传给前端）。
 #[derive(Debug, Serialize)]
 struct PeerInfo {
     peer_id: String,
     addresses: Vec<String>,
 }
 
-/// 文件注册结果（返回给前端展示）。
 #[derive(Debug, Serialize)]
 struct FileRegisterResult {
-    /// SHA-256 哈希（十六进制字符串，64 字符）
     hash: String,
     file_name: String,
     file_path: String,
@@ -246,20 +169,14 @@ struct FileRegisterResult {
     timestamp: u64,
 }
 
-/// 获取本机 MAC 地址作为默认 P2P 节点名称。
 #[tauri::command]
 fn get_default_peer_name() -> String {
     mac_address::get_mac_address()
-        .ok()
-        .flatten()
+        .ok().flatten()
         .map(|mac| mac.to_string())
         .unwrap_or_else(|| "Unknown".into())
 }
 
-/// 注册一个文件到 P2P 分享注册表。
-///
-/// 哈希 = SHA-256(文件内容 + 注册时间戳 + 文件全路径 + 本机 MAC)
-/// 混合 MAC 和路径可防止不同设备上相同内容的文件产生冲突。
 #[tauri::command]
 async fn register_file(
     path: String,
@@ -269,88 +186,57 @@ async fn register_file(
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let file_path = std::path::Path::new(&path);
+    if !file_path.exists() { return Err(format!("文件不存在: {}", path)); }
+    if !file_path.is_file() { return Err(format!("路径不是文件: {}", path)); }
 
-    // 验证文件存在
-    if !file_path.exists() {
-        return Err(format!("文件不存在: {}", path));
-    }
-    if !file_path.is_file() {
-        return Err(format!("路径不是文件: {}", path));
-    }
+    let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown").to_string();
+    let file_size = file_path.metadata().map_err(|e| format!("读取文件元数据失败: {}", e))?.len();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| format!("系统时间错误: {}", e))?.as_secs();
+    let mac = mac_address::get_mac_address().ok().flatten().map(|m| m.to_string()).unwrap_or_else(|| "00:00:00:00:00:00".into());
 
-    let file_name = file_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    let file_size = file_path
-        .metadata()
-        .map_err(|e| format!("读取文件元数据失败: {}", e))?
-        .len();
-
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| format!("系统时间错误: {}", e))?
-        .as_secs();
-
-    let mac = mac_address::get_mac_address()
-        .ok()
-        .flatten()
-        .map(|m| m.to_string())
-        .unwrap_or_else(|| "00:00:00:00:00:00".into());
-
-    // 流式计算 SHA-256
     let mut hasher = Sha256::new();
-
-    // 1) 文件内容
-    let mut file = std::fs::File::open(file_path)
-        .map_err(|e| format!("打开文件失败: {}", e))?;
-    std::io::copy(&mut file, &mut hasher)
-        .map_err(|e| format!("读取文件失败: {}", e))?;
-
-    // 2) 混合防冲突信息
+    let mut file = std::fs::File::open(file_path).map_err(|e| format!("打开文件失败: {}", e))?;
+    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("读取文件失败: {}", e))?;
     hasher.update(timestamp.to_string().as_bytes());
     hasher.update(path.as_bytes());
     hasher.update(mac.as_bytes());
-
     let hash = format!("{:x}", hasher.finalize());
 
-    // 写入注册表
     let mut p2p = state.lock().await;
-    p2p.file_registry.insert(
-        hash.clone(),
-        p2p::FileEntry {
-            file_path: path.clone(),
-            file_name: file_name.clone(),
-            file_size,
-            register_timestamp: timestamp,
-        },
-    );
+    p2p.file_registry.insert(hash.clone(), p2p::FileEntry {
+        file_path: path.clone(), file_name: file_name.clone(),
+        file_size, register_timestamp: timestamp,
+    });
 
-    Ok(FileRegisterResult {
-        hash,
-        file_name,
-        file_path: path,
-        file_size,
-        timestamp,
-    })
+    Ok(FileRegisterResult { hash, file_name, file_path: path, file_size, timestamp })
 }
 
-/// 获取当前在线的对等节点列表。
+/// 请求下载文件（发起 P2P 传输）。
+#[tauri::command]
+fn request_file(
+    hash: String,
+    save_path: String,
+    state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
+) -> Result<(), String> {
+    let p2p = state.try_lock().map_err(|e| format!("状态锁定失败: {}", e))?;
+    match &p2p.download_tx {
+        Some(tx) => {
+            tx.send(p2p::DownloadRequest { hash, save_path })
+                .map_err(|e| format!("发送下载请求失败: {}", e))
+        }
+        None => Err("P2P 节点未初始化".into()),
+    }
+}
+
 #[tauri::command]
 async fn get_peer_list(
     state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
 ) -> Result<Vec<PeerInfo>, String> {
     let p2p = state.lock().await;
-    Ok(p2p
-        .peers
-        .iter()
-        .map(|(id, addrs)| PeerInfo {
-            peer_id: id.to_string(),
-            addresses: addrs.iter().map(|a| a.to_string()).collect(),
-        })
-        .collect())
+    Ok(p2p.peers.iter().map(|(id, addrs)| PeerInfo {
+        peer_id: id.to_string(),
+        addresses: addrs.iter().map(|a| a.to_string()).collect(),
+    }).collect())
 }
 
 // ========== 应用入口 ==========
@@ -362,101 +248,56 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_x::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["quick-selector"])
-                .build(),
-        )
-        .manage(QuickSelectorState {
-            entries_json: Mutex::new("[]".into()),
-        })
+        .plugin(tauri_plugin_window_state::Builder::default().with_denylist(&["quick-selector"]).build())
+        .manage(QuickSelectorState { entries_json: Mutex::new("[]".into()) })
         .setup(|app| {
-            // ---- 预创建 QuickSelector 窗口 ----
             let url = get_quick_selector_url(&app.handle());
             let _qs_window = tauri::WebviewWindowBuilder::new(app, "quick-selector", url)
-                .title("QuickSelector")
-                .inner_size(540.0, 420.0)
-                .decorations(false)
-                .always_on_top(true)
-                .center()
-                .skip_taskbar(true)
-                .visible(false)
-                .build()
+                .title("QuickSelector").inner_size(540.0, 420.0)
+                .decorations(false).always_on_top(true).center()
+                .skip_taskbar(true).visible(false).build()
                 .expect("预创建 QuickSelector 窗口失败");
 
-            // ---- 系统托盘 ----
-            let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                .expect("加载托盘图标失败");
+            let icon = Image::from_bytes(include_bytes!("../icons/32x32.png")).expect("加载托盘图标失败");
+            let show_item = MenuItemBuilder::with_id("show", "显示主窗口").build(app).expect("创建托盘菜单项失败");
+            let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app).expect("创建托盘菜单项失败");
+            let menu = MenuBuilder::new(app).items(&[&show_item, &quit_item]).build().expect("创建托盘菜单失败");
 
-            let show_item = MenuItemBuilder::with_id("show", "显示主窗口")
-                .build(app)
-                .expect("创建托盘菜单项失败");
-            let quit_item = MenuItemBuilder::with_id("quit", "退出")
-                .build(app)
-                .expect("创建托盘菜单项失败");
-            let menu = MenuBuilder::new(app)
-                .items(&[&show_item, &quit_item])
-                .build()
-                .expect("创建托盘菜单失败");
-
-            let _tray = TrayIconBuilder::new()
-                .icon(icon)
-                .menu(&menu)
-                .tooltip("SovBoard")
-                .on_menu_event(|app, event| {
-                    match event.id().as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
-                    }
+            let _tray = TrayIconBuilder::new().icon(icon).menu(&menu).tooltip("SovBoard")
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => { if let Some(w) = app.get_webview_window("main") { let _ = w.show(); let _ = w.set_focus(); } }
+                    "quit" => { app.exit(0); }
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        if let Some(w) = tray.app_handle().get_webview_window("main") { let _ = w.show(); let _ = w.set_focus(); }
                     }
                 })
-                .build(app)
-                .expect("创建托盘图标失败");
+                .build(app).expect("创建托盘图标失败");
 
-            // ---- 拦截关闭事件：隐藏窗口而不是退出 ----
             if let Some(window) = app.get_webview_window("main") {
                 let win_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = win_clone.hide();
+                        api.prevent_close(); let _ = win_clone.hide();
                     }
                 });
             }
 
             // ---- 启动 P2P 网络节点 ----
+            let (download_tx, download_rx) = tokio::sync::mpsc::unbounded_channel();
             let p2p_state = Arc::new(tokio::sync::Mutex::new(p2p::P2PState {
                 peers: std::collections::HashMap::new(),
                 file_registry: std::collections::HashMap::new(),
+                download_tx: Some(download_tx),
             }));
             app.manage(p2p_state.clone());
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = p2p::start_p2p_node(p2p_state).await {
+                if let Err(e) = p2p::start_p2p_node(p2p_state, download_rx).await {
                     tracing::error!("P2P 节点异常退出: {}", e);
-                    // 通知前端 P2P 不可用
                     let _ = app_handle.emit("p2p:error", e.to_string());
                 }
             });
@@ -464,13 +305,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            cleanup_orphan_images,
-            show_quick_selector,
-            hide_quick_selector,
-            get_quick_selector_entries,
-            get_default_peer_name,
-            register_file,
-            get_peer_list,
+            cleanup_orphan_images, show_quick_selector, hide_quick_selector,
+            get_quick_selector_entries, get_default_peer_name, register_file,
+            request_file, get_peer_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -370,6 +370,20 @@ docs: 补充架构说明和开发命令
 - **App.css**：新增 `.file-share-page` / `.drop-zone` / `.shared-files` / `.shared-file-item` 等全套样式
 - **验证**：`cargo check`（仅 1 个 `FileEntry` dead_code 警告）+ `tsc --noEmit` 均通过
 
+### Session 2026-07-09 — P2P 阶段四：请求-响应传输
+- **架构**：`request_response::cbor` 块级流式传输，单块 ≤ 64KB，防 OOM
+- **p2p.rs 重写**
+  - `FileRequest`：`hash` + `chunk_index`（按块请求）
+  - `FileResponse`：`file_name` + `file_size` + `total_chunks` + `chunk_index` + `chunk_data` + `error`
+  - 新增 `RespRouter`（`Arc<Mutex<HashMap<OutboundRequestId, oneshot::Sender<FileResponse>>>>`）将异步响应路由到下载任务
+  - `make_response`：同步 `std::io::Read` 读取 64KB 块并通过 `behaviour.send_response()` 发送
+  - `download_file`：通过 oneshot channel 接收响应，逐块写入本地文件
+  - 事件循环：`tokio::select!` 同时处理 swarm 事件 + 下载请求
+  - Swarm 包裹在 `Arc<Mutex<>>` 中允许多任务安全访问
+- **lib.rs**：新增 `request_file` Tauri command，通过 channel 发送下载请求
+- **FileSharePage.tsx**：通知文字「成功分享」→「成功添加」
+- **验证**：`cargo check`（仅 1 个 `FileEntry.register_timestamp` dead_code 警告）+ `tsc --noEmit` 均通过
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -417,11 +431,11 @@ docs: 补充架构说明和开发命令
 - [x] Rust 后端：维护内存中的文件注册表（HashMap<hash, (file_path, file_size, file_name)>）
 - [x] 前端：拖入文件后显示文件名、大小、哈希值和分享状态
 
-#### 阶段四：请求-响应传输
-- [ ] Rust 后端：实现 `request_response` 行为，定义文件请求/响应协议
-- [ ] Rust 后端：创建 Tauri command `request_file(hash: &str) -> Result<DownloadInfo, String>`
-- [ ] Rust 后端：发起文件请求 → 对等节点响应文件数据（分块传输）
-- [ ] Rust 后端：创建 Tauri event `download_progress` 实时推送传输进度
+#### 阶段四：请求-响应传输 ✅
+- [x] Rust 后端：实现 `request_response` 行为，定义文件请求/响应协议
+- [x] Rust 后端：创建 Tauri command `request_file(hash: &str) -> Result<DownloadInfo, String>`
+- [x] Rust 后端：发起文件请求 → 对等节点响应文件数据（分块传输）
+- [x] Rust 后端：创建 Tauri event `download_progress` 实时推送传输进度
 
 #### 阶段五：下载界面
 - [ ] 前端：新建 `src/components/FileSharePage.tsx` —— 分享文件列表 + 哈希查找输入框

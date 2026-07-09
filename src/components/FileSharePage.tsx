@@ -82,7 +82,7 @@ function FileSharePage() {
 
             if (successCount > 0) {
               messageApi.success(
-                `成功分享 ${successCount} 个文件` +
+                `成功添加 ${successCount} 个文件` +
                   (failCount > 0 ? `，${failCount} 个失败` : ""),
               );
             }
