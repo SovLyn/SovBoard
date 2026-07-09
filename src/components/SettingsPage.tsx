@@ -11,6 +11,8 @@ interface SettingsPageProps {
   onSetCleanupInterval: (seconds: number) => void;
   shortcut: string;
   onSetShortcut: (shortcut: string) => void;
+  peerName: string;
+  onSetPeerName: (name: string) => void;
   ready: boolean;
 }
 
@@ -44,6 +46,8 @@ function SettingsPage({
   onSetCleanupInterval,
   shortcut,
   onSetShortcut,
+  peerName,
+  onSetPeerName,
   ready,
 }: SettingsPageProps) {
   const { notification } = App.useApp();
@@ -187,6 +191,16 @@ function SettingsPage({
           value={cleanupInterval}
           onChange={(v) => v !== null && onSetCleanupInterval(v)}
           style={{ width: 120 }}
+        />
+      </div>
+
+      <div className="setting-item">
+        <span className="setting-label">P2P 节点名称</span>
+        <Input
+          value={peerName}
+          onChange={(e) => onSetPeerName(e.target.value)}
+          placeholder="局域网中的发现名称"
+          style={{ width: 220 }}
         />
       </div>
 

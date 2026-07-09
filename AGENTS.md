@@ -334,6 +334,21 @@ docs: 补充架构说明和开发命令
   - 异常退出时通过 `app_handle.emit("p2p:error", ...)` 通知前端
 - **验证**：`cargo check` 编译通过（仅 2 个 dead_code 警告，阶段二~四消除）
 
+### Session 2026-07-09 — P2P 阶段二：mDNS 发现
+- **Cargo.toml**：添加 `mac_address` v1.1 依赖，用于获取本机 MAC 地址作为默认节点名
+- **lib.rs**
+  - 新增 `PeerInfo` 结构体（`peer_id` + `addresses`），实现 `Serialize`
+  - 新增 `get_default_peer_name` command：调用 `mac_address::get_mac_address()`，失败 fallback `"Unknown"`
+  - 新增 `get_peer_list` async command：从 `P2PState` 读取在线节点列表，通过 `tokio::sync::Mutex::lock().await` 安全读取
+  - 两个新命令注册到 `invoke_handler`
+- **App.tsx**
+  - 新增 `PEER_NAME_KEY = "peerName"` 常量、`peerName` 状态、`handleSetPeerName` 持久化回调
+  - 启动时从 settings store 加载已保存名称；若无则 `invoke("get_default_peer_name")` 获取 MAC 地址
+- **SettingsPage.tsx**
+  - 接口新增 `peerName` / `onSetPeerName` props
+  - 新增「P2P 节点名称」Input 设置项，placeholder `"局域网中的发现名称"`
+- **验证**：`cargo check` + `tsc --noEmit` 均通过
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -369,11 +384,11 @@ docs: 补充架构说明和开发命令
 - [x] Rust 后端：配置 Noise 加密 + Yamux 多路复用 + TCP 传输
 - [x] Rust 后端：在 `lib.rs` 的 `setup()` 中启动 libp2p swarm 后台任务
 
-#### 阶段二：mDNS 发现
-- [ ] Rust 后端：实现 mDNS 行为（`libp2p::mdns`），局域网自动广播和发现节点
-- [ ] Rust 后端：创建 Tauri command `get_peer_list` 返回在线节点列表
-- [ ] Rust 后端：读取/设置节点名称（从 settings store，默认 MAC 地址）
-- [ ] 前端 SettingsPage：新增「P2P 节点名称」设置项（默认显示 MAC 地址）
+#### 阶段二：mDNS 发现 ✅
+- [x] Rust 后端：实现 mDNS 行为（`libp2p::mdns`），局域网自动广播和发现节点
+- [x] Rust 后端：创建 Tauri command `get_peer_list` 返回在线节点列表
+- [x] Rust 后端：读取/设置节点名称（从 settings store，默认 MAC 地址）
+- [x] 前端 SettingsPage：新增「P2P 节点名称」设置项（默认显示 MAC 地址）
 
 #### 阶段三：文件注册与哈希
 - [ ] 前端：新增「文件分享」标签页，含拖放区域（Drag & Drop）

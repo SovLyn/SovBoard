@@ -64,6 +64,7 @@ const MAX_CLIP_ENTRIES_KEY = "maxClipEntries";
 const CLEANUP_INTERVAL_KEY = "cleanupInterval";
 const CLIPBOARD_DATA_KEY = "clipboardData";
 const SHORTCUT_KEY = "globalShortcut";
+const PEER_NAME_KEY = "peerName";
 const DEFAULT_SHORTCUT = "Ctrl+Alt+Q";
 const DEFAULT_MAX_ENTRIES = 32;
 const DEFAULT_CLEANUP_INTERVAL = 60;
@@ -148,6 +149,9 @@ function App() {
 
   // 全局快捷键
   const [shortcut, setShortcut] = useState(DEFAULT_SHORTCUT);
+
+  // P2P 节点名称
+  const [peerName, setPeerName] = useState("");
 
   // refs
   const skipNextChangeRef = useRef(false);
@@ -266,6 +270,20 @@ function App() {
           await settingsStore.get<string>(SHORTCUT_KEY);
         if (typeof savedShortcut === "string" && savedShortcut.trim().length > 0) {
           setShortcut(savedShortcut.trim());
+        }
+
+        // 加载 P2P 节点名称，没有则用 MAC 地址
+        const savedPeerName =
+          await settingsStore.get<string>(PEER_NAME_KEY);
+        if (typeof savedPeerName === "string" && savedPeerName.trim().length > 0) {
+          setPeerName(savedPeerName.trim());
+        } else {
+          try {
+            const defaultName = await invoke<string>("get_default_peer_name");
+            setPeerName(defaultName);
+          } catch {
+            setPeerName("Unknown");
+          }
         }
       } catch {
         // ignore
@@ -496,6 +514,23 @@ function App() {
     }
   }, []);
 
+  const handleSetPeerName = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return;
+    setPeerName(trimmed);
+
+    try {
+      const store = await load(SETTINGS_STORE, {
+        autoSave: false,
+        defaults: {},
+      });
+      await store.set(PEER_NAME_KEY, trimmed);
+      await store.save();
+    } catch (err) {
+      console.error("保存节点名称失败:", err);
+    }
+  }, []);
+
   // ===== 全局快捷键注册 =====
   useEffect(() => {
     if (!clipReady || shortcut.length === 0) return;
@@ -635,6 +670,8 @@ function App() {
             onSetCleanupInterval={handleSetCleanupInterval}
             shortcut={shortcut}
             onSetShortcut={handleSetShortcut}
+            peerName={peerName}
+            onSetPeerName={handleSetPeerName}
             ready={themeReady}
           />
         )}

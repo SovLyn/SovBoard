@@ -226,6 +226,41 @@ fn get_quick_selector_entries(app: tauri::AppHandle) -> Result<String, String> {
     Ok(json)
 }
 
+// ========== P2P commands ==========
+
+/// 对等节点摘要（传给前端）。
+#[derive(Debug, Serialize)]
+struct PeerInfo {
+    peer_id: String,
+    addresses: Vec<String>,
+}
+
+/// 获取本机 MAC 地址作为默认 P2P 节点名称。
+#[tauri::command]
+fn get_default_peer_name() -> String {
+    mac_address::get_mac_address()
+        .ok()
+        .flatten()
+        .map(|mac| mac.to_string())
+        .unwrap_or_else(|| "Unknown".into())
+}
+
+/// 获取当前在线的对等节点列表。
+#[tauri::command]
+async fn get_peer_list(
+    state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
+) -> Result<Vec<PeerInfo>, String> {
+    let p2p = state.lock().await;
+    Ok(p2p
+        .peers
+        .iter()
+        .map(|(id, addrs)| PeerInfo {
+            peer_id: id.to_string(),
+            addresses: addrs.iter().map(|a| a.to_string()).collect(),
+        })
+        .collect())
+}
+
 // ========== 应用入口 ==========
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -341,6 +376,8 @@ pub fn run() {
             show_quick_selector,
             hide_quick_selector,
             get_quick_selector_entries,
+            get_default_peer_name,
+            get_peer_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
