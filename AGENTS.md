@@ -320,6 +320,20 @@ docs: 补充架构说明和开发命令
 - 在 AGENTS.md 中新增功能规划章节，列出完整 todo 清单
 - 功能稳定后再合入主干
 
+### Session 2026-07-09 — P2P 阶段一：基础设施搭建
+- **Cargo.toml**：添加 `libp2p` 0.54（features: tokio/tcp/noise/yamux/mdns/request-response/cbor/macros）、`tokio`、`futures`、`tracing`
+- **新建 `src-tauri/src/p2p.rs`**
+  - 定义协议数据类型 `FileRequest` / `FileResponse`（CBOR 序列化）
+  - 定义共享状态 `P2PState`（`peers: HashMap<PeerId, Vec<Multiaddr>>` + `file_registry`）
+  - 定义组合 `NetworkBehaviour`：`mdns::tokio::Behaviour` + `request_response::cbor::Behaviour<FileRequest, FileResponse>`
+  - 实现 `start_p2p_node()`：Ed25519 密钥 → TCP + Noise + Yamux → 监听 `/ip4/0.0.0.0/tcp/0` → 事件循环（mDNS 发现/过期 + FileExchange 占位）
+- **修改 `lib.rs`**
+  - 添加 `mod p2p;` 和 `use std::sync::Arc;`
+  - 在 `setup()` 末尾创建 `Arc<tokio::sync::Mutex<P2PState>>`，`app.manage()` 注册为全局状态
+  - `tauri::async_runtime::spawn` 启动 `start_p2p_node` 后台循环
+  - 异常退出时通过 `app_handle.emit("p2p:error", ...)` 通知前端
+- **验证**：`cargo check` 编译通过（仅 2 个 dead_code 警告，阶段二~四消除）
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -349,11 +363,11 @@ docs: 补充架构说明和开发命令
 
 ### Todo 清单
 
-#### 阶段一：基础设施搭建
-- [ ] Rust 后端：添加 `rust-libp2p` 相关依赖到 `Cargo.toml`
-- [ ] Rust 后端：搭建 libp2p 节点骨架（Swarm、Transport、NetworkBehaviour）
-- [ ] Rust 后端：配置 Noise 加密 + Yamux 多路复用 + TCP 传输
-- [ ] Rust 后端：在 `lib.rs` 的 `setup()` 中启动 libp2p swarm 后台任务
+#### 阶段一：基础设施搭建 ✅
+- [x] Rust 后端：添加 `rust-libp2p` 相关依赖到 `Cargo.toml`
+- [x] Rust 后端：搭建 libp2p 节点骨架（Swarm、Transport、NetworkBehaviour）
+- [x] Rust 后端：配置 Noise 加密 + Yamux 多路复用 + TCP 传输
+- [x] Rust 后端：在 `lib.rs` 的 `setup()` 中启动 libp2p swarm 后台任务
 
 #### 阶段二：mDNS 发现
 - [ ] Rust 后端：实现 mDNS 行为（`libp2p::mdns`），局域网自动广播和发现节点

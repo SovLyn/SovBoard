@@ -1,6 +1,9 @@
+mod p2p;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -314,6 +317,22 @@ pub fn run() {
                     }
                 });
             }
+
+            // ---- 启动 P2P 网络节点 ----
+            let p2p_state = Arc::new(tokio::sync::Mutex::new(p2p::P2PState {
+                peers: std::collections::HashMap::new(),
+                file_registry: std::collections::HashMap::new(),
+            }));
+            app.manage(p2p_state.clone());
+
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = p2p::start_p2p_node(p2p_state).await {
+                    tracing::error!("P2P 节点异常退出: {}", e);
+                    // 通知前端 P2P 不可用
+                    let _ = app_handle.emit("p2p:error", e.to_string());
+                }
+            });
 
             Ok(())
         })
