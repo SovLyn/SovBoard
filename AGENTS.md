@@ -314,3 +314,79 @@ docs: 补充架构说明和开发命令
 - 安装 `@resvg/resvg-js` v2.6.2（devDependencies），编写 `convert_icons.cjs` 脚本
 - 将 `src-tauri/icons/` 下全部 16 个图标文件（PNG/ICO/ICNS）替换为基于 `galaxy.svg` 渲染的新图标
 - **验证**：图标生成成功，共 14 个 PNG + 1 个 ICO + 1 个 ICNS
+
+### Session 2026-07-09 — P2P 局域网文件分享功能规划
+- 创建功能分支 `feat/p2p-file-share`（从 `main` 分出）
+- 在 AGENTS.md 中新增功能规划章节，列出完整 todo 清单
+- 功能稳定后再合入主干
+
+---
+
+## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
+
+> 状态：规划中 | 分支：`feat/p2p-file-share` | 创建日期：2026-07-09
+
+基于 libp2p + mDNS 的局域网文件分享功能。无需中央服务器，应用在局域网中相互发现，通过文件哈希定位并传输文件。
+
+### 技术选型
+
+| 层       | 技术                    | 用途                       |
+|----------|------------------------|----------------------------|
+| 网络传输 | `rust-libp2p`          | P2P 网络栈（TCP + Noise + Yamux） |
+| 服务发现 | libp2p-mDNS            | 局域网自动发现对等节点       |
+| 内容寻址 | SHA-256                | 文件哈希，作为内容标识符     |
+| 文件传输 | libp2p-request-response | 请求/响应模式传输文件数据   |
+| 后端集成 | Rust (Tauri)           | 在 `src-tauri` 中运行 libp2p 节点 |
+| 前端集成 | React + invoke()       | 拖放文件、输入哈希、显示传输进度 |
+
+### 功能需求
+
+- **节点发现**：通过 mDNS 在局域网中自动发现运行 SovBoard 的其他设备
+- **节点名称**：在设置页面输入自定义发现名称，默认使用本机 MAC 地址
+- **文件分享**：将文件拖入应用拖放区域，Rust 后端计算 SHA-256 哈希值并注册为可分享文件
+- **文件下载**：在其他设备输入哈希值，如果局域网中存在对应文件则进入下载界面；不存在则弹出警告提示
+- **传输状态**：显示下载进度、传输速度和预计剩余时间
+
+### Todo 清单
+
+#### 阶段一：基础设施搭建
+- [ ] Rust 后端：添加 `rust-libp2p` 相关依赖到 `Cargo.toml`
+- [ ] Rust 后端：搭建 libp2p 节点骨架（Swarm、Transport、NetworkBehaviour）
+- [ ] Rust 后端：配置 Noise 加密 + Yamux 多路复用 + TCP 传输
+- [ ] Rust 后端：在 `lib.rs` 的 `setup()` 中启动 libp2p swarm 后台任务
+
+#### 阶段二：mDNS 发现
+- [ ] Rust 后端：实现 mDNS 行为（`libp2p::mdns`），局域网自动广播和发现节点
+- [ ] Rust 后端：创建 Tauri command `get_peer_list` 返回在线节点列表
+- [ ] Rust 后端：读取/设置节点名称（从 settings store，默认 MAC 地址）
+- [ ] 前端 SettingsPage：新增「P2P 节点名称」设置项（默认显示 MAC 地址）
+
+#### 阶段三：文件注册与哈希
+- [ ] 前端：新增「文件分享」标签页，含拖放区域（Drag & Drop）
+- [ ] Rust 后端：创建 Tauri command `register_file(path: &str) -> String`，计算 SHA-256 并加入分享注册表
+- [ ] Rust 后端：维护内存中的文件注册表（HashMap<hash, (file_path, file_size, file_name)>）
+- [ ] 前端：拖入文件后显示文件名、大小、哈希值和分享状态
+
+#### 阶段四：请求-响应传输
+- [ ] Rust 后端：实现 `request_response` 行为，定义文件请求/响应协议
+- [ ] Rust 后端：创建 Tauri command `request_file(hash: &str) -> Result<DownloadInfo, String>`
+- [ ] Rust 后端：发起文件请求 → 对等节点响应文件数据（分块传输）
+- [ ] Rust 后端：创建 Tauri event `download_progress` 实时推送传输进度
+
+#### 阶段五：下载界面
+- [ ] 前端：新建 `src/components/FileSharePage.tsx` —— 分享文件列表 + 哈希查找输入框
+- [ ] 前端：输入哈希值 → `invoke("request_file", { hash })` → 成功则跳转下载界面 → 失败弹警告
+- [ ] 前端：新建 `src/components/DownloadPage.tsx` —— 下载进度条、传输速度、取消按钮
+- [ ] 前端 App.css：文件分享/下载页面样式（复用 CSS 变量体系）
+
+#### 阶段六：设置与集成
+- [ ] 前端 SettingsPage：新增「mDNS 发现名」输入框（默认 MAC 地址，持久化到 settings.json）
+- [ ] Rust 后端：添加 `permission` 声明（网络访问等）到 `capabilities/default.json`
+- [ ] 验收测试：两台设备在同一局域网下测试发现、分享、下载全流程
+
+### 注意事项
+
+- libp2p 依赖较大（编译时间显著增加），首次 `cargo build` 需耐心等待
+- mDNS 仅在同一子网内有效，不支持跨子网发现
+- 文件传输目前不实现断点续传（v1 范围外）
+- 哈希值需考虑展示截断（前 8 位 + "..." + 后 8 位），方便手动输入和比对
