@@ -235,6 +235,17 @@ struct PeerInfo {
     addresses: Vec<String>,
 }
 
+/// 文件注册结果（返回给前端展示）。
+#[derive(Debug, Serialize)]
+struct FileRegisterResult {
+    /// SHA-256 哈希（十六进制字符串，64 字符）
+    hash: String,
+    file_name: String,
+    file_path: String,
+    file_size: u64,
+    timestamp: u64,
+}
+
 /// 获取本机 MAC 地址作为默认 P2P 节点名称。
 #[tauri::command]
 fn get_default_peer_name() -> String {
@@ -243,6 +254,87 @@ fn get_default_peer_name() -> String {
         .flatten()
         .map(|mac| mac.to_string())
         .unwrap_or_else(|| "Unknown".into())
+}
+
+/// 注册一个文件到 P2P 分享注册表。
+///
+/// 哈希 = SHA-256(文件内容 + 注册时间戳 + 文件全路径 + 本机 MAC)
+/// 混合 MAC 和路径可防止不同设备上相同内容的文件产生冲突。
+#[tauri::command]
+async fn register_file(
+    path: String,
+    state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
+) -> Result<FileRegisterResult, String> {
+    use sha2::{Digest, Sha256};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let file_path = std::path::Path::new(&path);
+
+    // 验证文件存在
+    if !file_path.exists() {
+        return Err(format!("文件不存在: {}", path));
+    }
+    if !file_path.is_file() {
+        return Err(format!("路径不是文件: {}", path));
+    }
+
+    let file_name = file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let file_size = file_path
+        .metadata()
+        .map_err(|e| format!("读取文件元数据失败: {}", e))?
+        .len();
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("系统时间错误: {}", e))?
+        .as_secs();
+
+    let mac = mac_address::get_mac_address()
+        .ok()
+        .flatten()
+        .map(|m| m.to_string())
+        .unwrap_or_else(|| "00:00:00:00:00:00".into());
+
+    // 流式计算 SHA-256
+    let mut hasher = Sha256::new();
+
+    // 1) 文件内容
+    let mut file = std::fs::File::open(file_path)
+        .map_err(|e| format!("打开文件失败: {}", e))?;
+    std::io::copy(&mut file, &mut hasher)
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+
+    // 2) 混合防冲突信息
+    hasher.update(timestamp.to_string().as_bytes());
+    hasher.update(path.as_bytes());
+    hasher.update(mac.as_bytes());
+
+    let hash = format!("{:x}", hasher.finalize());
+
+    // 写入注册表
+    let mut p2p = state.lock().await;
+    p2p.file_registry.insert(
+        hash.clone(),
+        p2p::FileEntry {
+            file_path: path.clone(),
+            file_name: file_name.clone(),
+            file_size,
+            register_timestamp: timestamp,
+        },
+    );
+
+    Ok(FileRegisterResult {
+        hash,
+        file_name,
+        file_path: path,
+        file_size,
+        timestamp,
+    })
 }
 
 /// 获取当前在线的对等节点列表。
@@ -377,6 +469,7 @@ pub fn run() {
             hide_quick_selector,
             get_quick_selector_entries,
             get_default_peer_name,
+            register_file,
             get_peer_list,
         ])
         .run(tauri::generate_context!())

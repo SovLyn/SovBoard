@@ -20,6 +20,7 @@ import {
 } from "@tauri-apps/plugin-global-shortcut";
 import { listen, emit, type UnlistenFn } from "@tauri-apps/api/event";
 import ClipboardPage from "./components/ClipboardPage";
+import FileSharePage from "./components/FileSharePage";
 import SettingsPage from "./components/SettingsPage";
 import "./App.css";
 
@@ -49,10 +50,11 @@ interface CleanupResult {
   errors: string[];
 }
 
-type Tab = "clipboard" | "settings";
+type Tab = "clipboard" | "fileshare" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "clipboard", label: "剪贴板" },
+  { id: "fileshare", label: "文件分享" },
   { id: "settings", label: "设置" },
 ];
 
@@ -660,6 +662,7 @@ function App() {
             onClear={handleClear}
           />
         )}
+        {activeTab === "fileshare" && <FileSharePage />}
         {activeTab === "settings" && (
           <SettingsPage
             themeMode={themeMode}

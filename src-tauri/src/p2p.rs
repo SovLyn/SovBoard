@@ -61,6 +61,8 @@ pub struct FileEntry {
     pub file_path: String,
     pub file_name: String,
     pub file_size: u64,
+    /// 注册时的 Unix 时间戳（秒），参与哈希计算防止冲突。
+    pub register_timestamp: u64,
 }
 
 // ============================================================================

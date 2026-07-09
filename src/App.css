@@ -576,3 +576,118 @@ button:active {
     var(--scrollbar-thumb-to) 86%
   );
 }
+
+/* ===== 文件分享页面 ===== */
+
+.file-share-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* 拖放区域 */
+.drop-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  transition: border-color 0.2s, background-color 0.2s;
+  cursor: default;
+}
+
+.drop-zone-over {
+  border-color: var(--accent-color);
+  background-color: var(--accent-bg);
+}
+
+.drop-zone-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.drop-zone-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.drop-zone-text {
+  font-size: 15px;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.drop-zone-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* 分享文件列表 */
+.shared-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shared-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+
+.shared-file-item:hover {
+  border-color: var(--accent-color);
+}
+
+.shared-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shared-file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-file-meta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.shared-file-hash {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--accent-color);
+  background: var(--accent-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  cursor: default;
+  max-width: fit-content;
+}
+
+.shared-file-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 空状态 */
+.share-empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  padding: 32px 0;
+}

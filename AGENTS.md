@@ -349,6 +349,27 @@ docs: 补充架构说明和开发命令
   - 新增「P2P 节点名称」Input 设置项，placeholder `"局域网中的发现名称"`
 - **验证**：`cargo check` + `tsc --noEmit` 均通过
 
+### Session 2026-07-09 — P2P 阶段三：文件注册与哈希
+- **Cargo.toml**：添加 `sha2 = "0.10"` 依赖
+- **p2p.rs**：`FileEntry` 新增 `register_timestamp: u64` 字段
+- **lib.rs**
+  - 新增 `FileRegisterResult` 结构体（`hash` + `file_name` + `file_path` + `file_size` + `timestamp`）
+  - 新增 `register_file` async command：
+    - 验证文件存在性
+    - 流式计算 SHA-256（`std::io::copy` 将文件内容管道到 `Sha256` hasher）
+    - 哈希混合防冲突信息：**文件内容 + 注册时间戳 + 文件全路径 + 本机 MAC 地址**
+    - 写入 `P2PState.file_registry`
+  - 注册到 `invoke_handler`
+- **前端 FileSharePage.tsx**（新建）
+  - Tauri `onDragDropEvent` 监听文件拖放（over / leave / drop）
+  - 拖放时逐个调用 `invoke("register_file", { path })` 注册文件
+  - 文件列表展示：文件名、大小（B/KB/MB/GB）、注册时间、哈希（前8后8截断 + Tooltip 完整值）
+  - 操作：复制哈希（`navigator.clipboard.writeText`）、取消分享
+  - 空状态占位
+- **App.tsx**：新增 `fileshare` Tab、导入 `FileSharePage`、渲染分支
+- **App.css**：新增 `.file-share-page` / `.drop-zone` / `.shared-files` / `.shared-file-item` 等全套样式
+- **验证**：`cargo check`（仅 1 个 `FileEntry` dead_code 警告）+ `tsc --noEmit` 均通过
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -390,11 +411,11 @@ docs: 补充架构说明和开发命令
 - [x] Rust 后端：读取/设置节点名称（从 settings store，默认 MAC 地址）
 - [x] 前端 SettingsPage：新增「P2P 节点名称」设置项（默认显示 MAC 地址）
 
-#### 阶段三：文件注册与哈希
-- [ ] 前端：新增「文件分享」标签页，含拖放区域（Drag & Drop）
-- [ ] Rust 后端：创建 Tauri command `register_file(path: &str) -> String`，计算 SHA-256 并加入分享注册表
-- [ ] Rust 后端：维护内存中的文件注册表（HashMap<hash, (file_path, file_size, file_name)>）
-- [ ] 前端：拖入文件后显示文件名、大小、哈希值和分享状态
+#### 阶段三：文件注册与哈希 ✅
+- [x] 前端：新增「文件分享」标签页，含拖放区域（Drag & Drop）
+- [x] Rust 后端：创建 Tauri command `register_file(path: &str) -> String`，计算 SHA-256 并加入分享注册表
+- [x] Rust 后端：维护内存中的文件注册表（HashMap<hash, (file_path, file_size, file_name)>）
+- [x] 前端：拖入文件后显示文件名、大小、哈希值和分享状态
 
 #### 阶段四：请求-响应传输
 - [ ] Rust 后端：实现 `request_response` 行为，定义文件请求/响应协议
