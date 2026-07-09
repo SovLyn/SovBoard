@@ -53,11 +53,11 @@ function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipE
       <div className="setting-item"><span className="setting-label">清理间隔（秒）</span>
         <InputNumber variant="filled" min={10} max={3600} step={10} value={cleanupInterval} onChange={(v) => v !== null && onSetCleanupInterval(v)} style={{ width: 120 }} /></div>
       <div className="setting-item"><span className="setting-label">P2P 节点名称</span>
-        <Input value={peerName} onChange={(e) => onSetPeerName(e.target.value)} placeholder="局域网中的发现名称" style={{ width: 220 }} /></div>
+        <Input variant="filled" value={peerName} onChange={(e) => onSetPeerName(e.target.value)} placeholder="局域网中的发现名称" style={{ width: 220 }} /></div>
       <div className="setting-item"><span className="setting-label">下载路径</span>
-        <Input value={downloadDir} onChange={(e) => onSetDownloadDir(e.target.value)} placeholder="文件下载保存目录" style={{ width: 300 }} /></div>
+        <Input variant="filled" value={downloadDir} onChange={(e) => onSetDownloadDir(e.target.value)} placeholder="文件下载保存目录" style={{ width: 300 }} /></div>
       <div className="setting-item"><span className="setting-label">全局快捷键</span>
-        <Input ref={inputRef} value={displayVal} readOnly={capturing} onFocus={handleFocus} onBlur={handleBlur}
+        <Input variant="filled" ref={inputRef} value={displayVal} readOnly={capturing} onFocus={handleFocus} onBlur={handleBlur}
           onKeyDown={handleKeyDown} placeholder="点击后按下快捷键" className={capturing ? "shortcut-capturing" : ""}
           style={{ width: 220, cursor: "pointer" }} /></div>
     </div>

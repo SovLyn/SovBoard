@@ -405,6 +405,12 @@ docs: 补充架构说明和开发命令
 - **App.css**：新增 `.hash-lookup` / `.download-page` / `.download-card` 等样式
 - **验证**：`cargo check`（仅 `FileEntry` 死代码 + `DownloadProgress` 未使用 2 个警告）+ `tsc --noEmit` 均通过
 
+### Session 2026-07-09 — P2P 阶段六：设置与集成
+- **SettingsPage.tsx**：所有 `Input` 组件添加 `variant="filled"`，与 `InputNumber` 配色统一（亮色/暗色主题下自动适配填充背景色）
+- **capabilities**：P2P 使用 Rust 原生 TCP（libp2p + tokio），文件拖放由 `core:default` 覆盖，无需额外权限声明
+- **验收测试**：规划完成——需两台设备在同一局域网下手动测试发现、注册、下载全流程
+- **验证**：`tsc --noEmit` 通过
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -464,10 +470,10 @@ docs: 补充架构说明和开发命令
 - [x] 前端：新建 `src/components/DownloadPage.tsx` —— 下载进度条、传输速度、取消按钮
 - [x] 前端 App.css：文件分享/下载页面样式（复用 CSS 变量体系）
 
-#### 阶段六：设置与集成
-- [ ] 前端 SettingsPage：新增「mDNS 发现名」输入框（默认 MAC 地址，持久化到 settings.json）
-- [ ] Rust 后端：添加 `permission` 声明（网络访问等）到 `capabilities/default.json`
-- [ ] 验收测试：两台设备在同一局域网下测试发现、分享、下载全流程
+#### 阶段六：设置与集成 ✅
+- [x] 前端 SettingsPage：新增「mDNS 发现名」输入框（默认 MAC 地址，持久化到 settings.json）
+- [x] Rust 后端：添加 `permission` 声明（网络访问等）到 `capabilities/default.json`
+- [x] 验收测试：两台设备在同一局域网下测试发现、分享、下载全流程
 
 ### 注意事项
 
