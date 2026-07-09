@@ -1,185 +1,124 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button, message, Tooltip } from "antd";
-import { CopyOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Button, Input, message, Tooltip } from "antd";
+import { CopyOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-// ========== 类型 ==========
-
 interface SharedFile {
-  hash: string;
-  file_name: string;
-  file_path: string;
-  file_size: number;
-  timestamp: number;
+  hash: string; file_name: string; file_path: string; file_size: number; timestamp: number;
 }
 
-/** 格式化字节数 */
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
-
-/** 格式化时间戳 */
 function formatTime(ts: number): string {
   const d = new Date(ts * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
-
-/** 截断哈希显示 */
 function truncateHash(hash: string): string {
   if (hash.length <= 20) return hash;
   return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 }
 
-// ========== 组件 ==========
+interface Props {
+  downloadDir: string;
+  onStartDownload: (hash: string) => void;
+}
 
-function FileSharePage() {
+function FileSharePage({ downloadDir, onStartDownload }: Props) {
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [isOver, setIsOver] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [messageApi, contextHolder] = message.useMessage();
+  const [hashInput, setHashInput] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [messageApi, ctx] = message.useMessage();
 
-  // ---- 拖放监听 ----
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-
+    let ul: UnlistenFn | undefined;
     (async () => {
       try {
-        unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
-          if (event.payload.type === "over") {
-            setIsOver(true);
-          } else if (event.payload.type === "leave") {
-            setIsOver(false);
-          } else if (event.payload.type === "drop") {
-            setIsOver(false);
-            const paths = event.payload.paths;
-
-            if (paths.length === 0) return;
-
-            setLoading(true);
-            let successCount = 0;
-            let failCount = 0;
-
-            for (const filePath of paths) {
-              try {
-                const result = await invoke<SharedFile>("register_file", {
-                  path: filePath,
-                });
-                setFiles((prev) => [result, ...prev]);
-                successCount++;
-              } catch (err) {
-                failCount++;
-                const msg =
-                  err instanceof Error ? err.message : String(err);
-                messageApi.error(`注册失败: ${filePath}\n${msg}`);
-              }
+        ul = await getCurrentWindow().onDragDropEvent(async (ev) => {
+          if (ev.payload.type === "over") setIsOver(true);
+          else if (ev.payload.type === "leave") setIsOver(false);
+          else if (ev.payload.type === "drop") {
+            setIsOver(false); setLoading(true);
+            let ok = 0, fail = 0;
+            for (const p of ev.payload.paths) {
+              try { const r = await invoke<SharedFile>("register_file", { path: p }); setFiles((prev) => [r, ...prev]); ok++; }
+              catch (e) { fail++; messageApi.error(`注册失败: ${p}\n${e}`); }
             }
-
-            if (successCount > 0) {
-              messageApi.success(
-                `成功添加 ${successCount} 个文件` +
-                  (failCount > 0 ? `，${failCount} 个失败` : ""),
-              );
-            }
-
+            if (ok > 0) messageApi.success(`成功添加 ${ok} 个文件` + (fail > 0 ? `，${fail} 个失败` : ""));
             setLoading(false);
           }
         });
-      } catch (err) {
-        console.error("注册拖放监听失败:", err);
-      }
+      } catch (e) { console.error("拖放监听失败:", e); }
     })();
-
-    return () => {
-      unlisten?.();
-    };
+    return () => { ul?.(); };
   }, [messageApi]);
 
-  // ---- 操作 ----
-
-  const copyHash = async (hash: string) => {
-    try {
-      await navigator.clipboard.writeText(hash);
-      messageApi.success("哈希已复制");
-    } catch {
-      messageApi.error("复制失败");
+  const handleSearch = useCallback(async () => {
+    const h = hashInput.trim();
+    if (!h) return;
+    if (h.length !== 64 || !/^[0-9a-f]+$/i.test(h)) {
+      messageApi.warning("请输入有效的 64 位 SHA-256 哈希值");
+      return;
     }
-  };
-
-  const removeFile = (hash: string) => {
-    setFiles((prev) => prev.filter((f) => f.hash !== hash));
-  };
-
-  // ---- 渲染 ----
+    if (!downloadDir) {
+      messageApi.warning("请先在设置中配置下载路径");
+      return;
+    }
+    setSearching(true);
+    onStartDownload(h);
+    setSearching(false);
+  }, [hashInput, downloadDir, onStartDownload, messageApi]);
 
   return (
     <div className="page file-share-page">
-      {contextHolder}
+      {ctx}
 
-      {/* 拖放区域 */}
-      <div
-        className={`drop-zone ${isOver ? "drop-zone-over" : ""} ${loading ? "drop-zone-loading" : ""}`}
-      >
-        <div className="drop-zone-icon">📁</div>
-        <div className="drop-zone-text">
-          {loading ? "正在注册文件..." : "拖放文件到此处分享"}
-        </div>
-        <div className="drop-zone-hint">
-          支持单个或多个文件同时拖放
-        </div>
+      {/* 哈希查找 */}
+      <div className="hash-lookup">
+        <Input
+          placeholder="输入文件哈希值查找下载..."
+          value={hashInput}
+          onChange={(e) => setHashInput(e.target.value)}
+          onPressEnter={handleSearch}
+          style={{ flex: 1 }}
+        />
+        <Button type="primary" icon={<SearchOutlined />} loading={searching}
+          onClick={handleSearch}>查找</Button>
       </div>
 
-      {/* 文件列表 */}
+      {/* 拖放区域 */}
+      <div className={`drop-zone ${isOver ? "drop-zone-over" : ""} ${loading ? "drop-zone-loading" : ""}`}>
+        <div className="drop-zone-icon">📁</div>
+        <div className="drop-zone-text">{loading ? "注册中..." : "拖放文件分享"}</div>
+        <div className="drop-zone-hint">支持单个或多个文件</div>
+      </div>
+
       {files.length > 0 && (
         <div className="shared-files">
           {files.map((f) => (
             <div key={f.hash} className="shared-file-item">
               <div className="shared-file-info">
                 <span className="shared-file-name">{f.file_name}</span>
-                <span className="shared-file-meta">
-                  {formatSize(f.file_size)} · {formatTime(f.timestamp)}
-                </span>
-                <Tooltip title={f.hash}>
-                  <code className="shared-file-hash">
-                    {truncateHash(f.hash)}
-                  </code>
-                </Tooltip>
+                <span className="shared-file-meta">{formatSize(f.file_size)} · {formatTime(f.timestamp)}</span>
+                <Tooltip title={f.hash}><code className="shared-file-hash">{truncateHash(f.hash)}</code></Tooltip>
               </div>
               <div className="shared-file-actions">
-                <Tooltip title="复制哈希">
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() => copyHash(f.hash)}
-                  />
-                </Tooltip>
-                <Tooltip title="取消分享">
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeFile(f.hash)}
-                  />
-                </Tooltip>
+                <Tooltip title="复制哈希"><Button type="text" size="small" icon={<CopyOutlined />} onClick={() => { navigator.clipboard.writeText(f.hash); messageApi.success("已复制"); }} /></Tooltip>
+                <Tooltip title="取消分享"><Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => setFiles((prev) => prev.filter((x) => x.hash !== f.hash))} /></Tooltip>
               </div>
             </div>
           ))}
         </div>
       )}
-
-      {/* 空状态 */}
-      {files.length === 0 && !loading && (
-        <div className="share-empty">
-          暂无分享文件，拖放文件到上方区域开始分享
-        </div>
-      )}
+      {files.length === 0 && !loading && <div className="share-empty">暂无分享文件</div>}
     </div>
   );
 }

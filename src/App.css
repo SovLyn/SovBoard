@@ -691,3 +691,75 @@ button:active {
   font-size: 13px;
   padding: 32px 0;
 }
+
+/* ===== 哈希查找 ===== */
+.hash-lookup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ===== 下载页面 ===== */
+.download-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 20px;
+}
+
+.download-card {
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.download-header {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.download-hash {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.download-hash code {
+  font-family: monospace;
+  color: var(--accent-color);
+  background: var(--accent-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.download-name {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-top: 4px;
+}
+
+.download-pct {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent-color);
+  margin-top: 4px;
+}
+
+.download-size {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.download-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 12px;
+}

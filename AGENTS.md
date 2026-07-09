@@ -384,6 +384,27 @@ docs: 补充架构说明和开发命令
 - **FileSharePage.tsx**：通知文字「成功分享」→「成功添加」
 - **验证**：`cargo check`（仅 1 个 `FileEntry.register_timestamp` dead_code 警告）+ `tsc --noEmit` 均通过
 
+### Session 2026-07-09 — P2P 阶段五：下载界面
+- **p2p.rs**
+  - `P2PState` 新增 `app_handle: Option<tauri::AppHandle>` 用于发送 Tauri 事件
+  - `DownloadRequest.save_path` → `save_dir`（文件名由对等节点提供）
+  - `download_file` 改为接收 `save_dir`，从 chunk 0 响应获取文件名构建完整路径
+  - 下载中每 10 块发送 `download:progress` 事件，完成发 `download:done`，失败发 `download:error`
+- **lib.rs**
+  - `request_file` 参数 `save_path` → `save_dir`
+  - setup 中设置 `app_handle` 到 P2PState
+- **前端 App.tsx**
+  - 新增 `downloadDir` 状态和持久化（默认系统下载路径通过 `@tauri-apps/api/path` 获取）
+  - 新增 `download` 状态（DownloadState）管理下载视图
+  - 监听 `download:progress` / `download:done` / `download:error` 事件更新进度
+  - `handleStartDownload` 校验下载路径后调用 `invoke("request_file")`
+  - 下载中切换为 DownloadPage 覆盖 Tab 内容区
+- **FileSharePage.tsx**：新增 Props（`downloadDir` / `onStartDownload`）；新增哈希查找输入框 + "查找"按钮（校验 64 位 SHA-256）
+- **DownloadPage.tsx**（新建）：下载中显示 antd Progress + 百分比 + 大小；完成/失败显示 Result 组件 + 返回按钮
+- **SettingsPage.tsx**：新增「下载路径」Input 设置项
+- **App.css**：新增 `.hash-lookup` / `.download-page` / `.download-card` 等样式
+- **验证**：`cargo check`（仅 `FileEntry` 死代码 + `DownloadProgress` 未使用 2 个警告）+ `tsc --noEmit` 均通过
+
 ---
 
 ## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
@@ -437,11 +458,11 @@ docs: 补充架构说明和开发命令
 - [x] Rust 后端：发起文件请求 → 对等节点响应文件数据（分块传输）
 - [x] Rust 后端：创建 Tauri event `download_progress` 实时推送传输进度
 
-#### 阶段五：下载界面
-- [ ] 前端：新建 `src/components/FileSharePage.tsx` —— 分享文件列表 + 哈希查找输入框
-- [ ] 前端：输入哈希值 → `invoke("request_file", { hash })` → 成功则跳转下载界面 → 失败弹警告
-- [ ] 前端：新建 `src/components/DownloadPage.tsx` —— 下载进度条、传输速度、取消按钮
-- [ ] 前端 App.css：文件分享/下载页面样式（复用 CSS 变量体系）
+#### 阶段五：下载界面 ✅
+- [x] 前端：新建 `src/components/FileSharePage.tsx` —— 分享文件列表 + 哈希查找输入框
+- [x] 前端：输入哈希值 → `invoke("request_file", { hash })` → 成功则跳转下载界面 → 失败弹警告
+- [x] 前端：新建 `src/components/DownloadPage.tsx` —— 下载进度条、传输速度、取消按钮
+- [x] 前端 App.css：文件分享/下载页面样式（复用 CSS 变量体系）
 
 #### 阶段六：设置与集成
 - [ ] 前端 SettingsPage：新增「mDNS 发现名」输入框（默认 MAC 地址，持久化到 settings.json）
