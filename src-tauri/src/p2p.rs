@@ -7,6 +7,7 @@
 //! - tokio::fs 异步 IO → 避免阻塞事件循环
 
 use std::collections::HashMap;
+use log::{info, warn, error};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -113,7 +114,7 @@ pub async fn start_p2p_node(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
-    println!("P2P 节点: {}", peer_id);
+    info!("[p2p] 节点启动: {}", peer_id);
 
     // Command channel：主循环持有 rx，tx 存入 state 供业务层使用
     let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<Command>();
@@ -159,21 +160,21 @@ pub async fn start_p2p_node(
             // ---- Swarm 事件 ----
             ev = swarm.select_next_some() => match ev {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("监听: {}/p2p/{}", address, peer_id);
+                    info!("[p2p] 监听: {}/p2p/{}", address, peer_id);
                 }
                 SwarmEvent::Behaviour(bev) => match bev {
                     P2PBehaviourEvent::Mdns(e) => match e {
                         mdns::Event::Discovered(list) => {
                             let mut st = state.lock().await;
                             for (pid, addr) in list {
-                                println!("发现: {}->{}", pid, addr);
+                                info!("[p2p::mdns] 发现: {} -> {}", pid, addr);
                                 st.peers.entry(pid).or_default().push(addr);
                             }
                         }
                         mdns::Event::Expired(list) => {
                             let mut st = state.lock().await;
                             for (pid, _addr) in list {
-                                println!("移除: {}", pid);
+                                info!("[p2p::mdns] 移除: {}", pid);
                                 st.peers.remove(&pid);
                             }
                         }
@@ -205,7 +206,7 @@ pub async fn start_p2p_node(
                          s.peers.keys().cloned().collect::<Vec<_>>(),
                          s.app_handle.clone())
                     };
-                    if local { println!("本地已有: {}", r.hash); continue; }
+                    if local { info!("[p2p::download] 本地已有: {}", r.hash); continue; }
 
                     if let Some(tgt) = peers.first().cloned() {
                         let tgt_id = tgt.to_string();
@@ -219,12 +220,12 @@ pub async fn start_p2p_node(
                                 cmd_tx_c, tgt, &tgt_id, &r.hash, &r.save_dir,
                                 app_handle_c, cancel.clone(),
                             ).await {
-                                println!("下载失败 [{}]: {}", r.hash, e);
+                                error!("[p2p::download] 下载失败 [{}]: {}", r.hash, e);
                             }
                             state_c.lock().await.cancel_tokens.remove(&r.hash);
                         });
                     } else {
-                        println!("无在线节点: {}", r.hash);
+                        warn!("[p2p::download] 无在线节点: {}", r.hash);
                         if let Some(ah) = &app_handle_c {
                             let _ = ah.emit("download:error", serde_json::json!({
                                 "hash": r.hash, "error": "无在线节点"
@@ -245,7 +246,7 @@ pub async fn start_p2p_node(
                         let s = state.lock().await;
                         if let Some(token) = s.cancel_tokens.get(&hash) {
                             token.store(true, Ordering::Relaxed);
-                            println!("取消下载: {}", hash);
+                            info!("[p2p::download] 取消下载: {}", hash);
                         }
                     }
                     None => break,
@@ -360,7 +361,7 @@ async fn download_file(
         fname
     );
 
-    println!("下载: {} ({:.1} MB, {} chunks)", fname, fs as f64 / 1e6, tc);
+    info!("[p2p::download] 开始下载: {} ({:.1} MB, {} chunks)", fname, fs as f64 / 1e6, tc);
 
     // 创建文件
     if let Some(p) = std::path::Path::new(&save_path).parent() {
@@ -390,7 +391,7 @@ async fn download_file(
     // 单块文件直接完成
     if tc <= 1 {
         file.flush().await.map_err(|e| format!("flush: {}", e))?;
-        println!("完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
+        info!("[p2p::download] 完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
         report(
             "download:done",
             serde_json::json!({
@@ -493,7 +494,7 @@ async fn download_file(
     }
 
     file.flush().await.map_err(|e| format!("flush: {}", e))?;
-    println!("完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
+    info!("[p2p::download] 完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
     report(
         "download:done",
         serde_json::json!({

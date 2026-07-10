@@ -411,6 +411,16 @@ docs: 补充架构说明和开发命令
 - **验收测试**：规划完成——需两台设备在同一局域网下手动测试发现、注册、下载全流程
 - **验证**：`tsc --noEmit` 通过
 
+### Session 2026-07-10 — 日志落盘
+- **Cargo.toml**：添加 `tauri-plugin-log = "2"` 依赖
+- **main.rs**：移除 `env_logger` 手动初始化（`tauri-plugin-log` 自动接管 log 系统初始化）
+- **lib.rs**：注册 `tauri_plugin_log` 插件，配置 `TargetKind::LogDir { file_name: Some("logs") }`，日志按平台写入：
+  - Windows → `%LOCALAPPDATA%/com.SovLyn.SovBoard/logs/`
+  - macOS → `~/Library/Logs/com.SovLyn.SovBoard/`
+  - Linux → `$XDG_DATA_HOME/com.SovLyn.SovBoard/logs/`（fallback `~/.local/share/...`）
+- 现有 `log::info!`/`warn!`/`error!` 调用（p2p.rs 等）无需改动，自动双输出（控制台 + 文件）
+- **验证**：`cargo check` 通过
+
 ## P2P 文件分享
 
 > 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）

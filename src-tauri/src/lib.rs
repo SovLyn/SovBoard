@@ -172,6 +172,15 @@ async fn get_peer_list(state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PSt
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("logs".to_string()),
+                    },
+                ))
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_x::init())
@@ -225,7 +234,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = p2p::start_p2p_node(p2p_state, download_rx).await {
-                    tracing::error!("P2P 异常: {}", e);
+                    log::error!("[p2p] 异常: {}", e);
                     let _ = app_handle.emit("p2p:error", e.to_string());
                 }
             });
