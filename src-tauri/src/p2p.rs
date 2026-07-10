@@ -84,6 +84,7 @@ pub struct FileEntry {
     pub file_path: String,
     pub file_name: String,
     pub file_size: u64,
+    #[allow(dead_code)]
     pub register_timestamp: u64,
 }
 
@@ -92,18 +93,6 @@ pub struct DownloadRequest {
     pub hash: String,
     /// 下载目录（文件名由对等节点提供）
     pub save_dir: String,
-}
-
-/// 下载进度事件（序列化后通过 Tauri event 发送给前端）。
-#[derive(Debug, Clone, Serialize)]
-pub struct DownloadProgress {
-    pub hash: String,
-    pub received: u64,
-    pub total: u64,
-    pub file_name: String,
-    pub file_path: String,
-    /// 对等节点的 PeerId（供前端显示设备名称）
-    pub target_peer_id: String,
 }
 
 type RespRouter = Arc<Mutex<HashMap<OutboundRequestId, oneshot::Sender<FileResponse>>>>;

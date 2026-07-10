@@ -411,13 +411,11 @@ docs: 补充架构说明和开发命令
 - **验收测试**：规划完成——需两台设备在同一局域网下手动测试发现、注册、下载全流程
 - **验证**：`tsc --noEmit` 通过
 
----
+## P2P 文件分享
 
-## P2P 文件分享 — 功能规划 (feat/p2p-file-share)
+> 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）
 
-> 状态：规划中 | 分支：`feat/p2p-file-share` | 创建日期：2026-07-09
-
-基于 libp2p + mDNS 的局域网文件分享功能。无需中央服务器，应用在局域网中相互发现，通过文件哈希定位并传输文件。
+基于 libp2p + mDNS 的局域网文件分享功能，无需中央服务器。
 
 ### 技术选型
 
@@ -426,109 +424,29 @@ docs: 补充架构说明和开发命令
 | 网络传输 | `rust-libp2p`          | P2P 网络栈（TCP + Noise + Yamux） |
 | 服务发现 | libp2p-mDNS            | 局域网自动发现对等节点       |
 | 内容寻址 | SHA-256                | 文件哈希，作为内容标识符     |
-| 文件传输 | libp2p-request-response | 请求/响应模式传输文件数据   |
-| 后端集成 | Rust (Tauri)           | 在 `src-tauri` 中运行 libp2p 节点 |
-| 前端集成 | React + invoke()       | 拖放文件、输入哈希、显示传输进度 |
+| 文件传输 | libp2p-request-response | 请求/响应模式，单块 ≤ 64KB |
+| 后端集成 | Rust (Tauri)           | `src-tauri/src/p2p.rs`      |
+| 前端集成 | React + invoke()       | `FileSharePage` + `DownloadPage` |
 
-### 功能需求
+### 功能
 
-- **节点发现**：通过 mDNS 在局域网中自动发现运行 SovBoard 的其他设备
-- **节点名称**：在设置页面输入自定义发现名称，默认使用本机 MAC 地址
-- **文件分享**：将文件拖入应用拖放区域，Rust 后端计算 SHA-256 哈希值并注册为可分享文件
-- **文件下载**：在其他设备输入哈希值，如果局域网中存在对应文件则进入下载界面；不存在则弹出警告提示
-- **传输状态**：显示下载进度、传输速度和预计剩余时间
+- **节点发现**：mDNS 自动发现局域网内其他 SovBoard 节点，文件分享页显示横向节点列表
+- **本机 PeerID**：设置页展示本机 libp2p PeerID（只读）
+- **文件分享**：拖放文件到应用，Rust 后端计算 SHA-256 并注册
+- **文件下载**：输入 64 位 SHA-256 哈希，对等节点分块传输（16 路并发滑动窗口）
+- **取消下载**：下载中可随时停止，自动清理部分文件
+- **下载界面**：自定义卡片布局，显示进度、设备来源，暗色主题适配
 
-### Todo 清单
+### 架构要点
 
-#### 阶段一：基础设施搭建 ✅
-- [x] Rust 后端：添加 `rust-libp2p` 相关依赖到 `Cargo.toml`
-- [x] Rust 后端：搭建 libp2p 节点骨架（Swarm、Transport、NetworkBehaviour）
-- [x] Rust 后端：配置 Noise 加密 + Yamux 多路复用 + TCP 传输
-- [x] Rust 后端：在 `lib.rs` 的 `setup()` 中启动 libp2p swarm 后台任务
-
-#### 阶段二：mDNS 发现 ✅
-- [x] Rust 后端：实现 mDNS 行为（`libp2p::mdns`），局域网自动广播和发现节点
-- [x] Rust 后端：创建 Tauri command `get_peer_list` 返回在线节点列表
-- [x] Rust 后端：读取/设置节点名称（从 settings store，默认 MAC 地址）
-- [x] 前端 SettingsPage：新增「P2P 节点名称」设置项（默认显示 MAC 地址）
-
-#### 阶段三：文件注册与哈希 ✅
-- [x] 前端：新增「文件分享」标签页，含拖放区域（Drag & Drop）
-- [x] Rust 后端：创建 Tauri command `register_file(path: &str) -> String`，计算 SHA-256 并加入分享注册表
-- [x] Rust 后端：维护内存中的文件注册表（HashMap<hash, (file_path, file_size, file_name)>）
-- [x] 前端：拖入文件后显示文件名、大小、哈希值和分享状态
-
-#### 阶段四：请求-响应传输 ✅
-- [x] Rust 后端：实现 `request_response` 行为，定义文件请求/响应协议
-- [x] Rust 后端：创建 Tauri command `request_file(hash: &str) -> Result<DownloadInfo, String>`
-- [x] Rust 后端：发起文件请求 → 对等节点响应文件数据（分块传输）
-- [x] Rust 后端：创建 Tauri event `download_progress` 实时推送传输进度
-
-#### 阶段五：下载界面 ✅
-- [x] 前端：新建 `src/components/FileSharePage.tsx` —— 分享文件列表 + 哈希查找输入框
-- [x] 前端：输入哈希值 → `invoke("request_file", { hash })` → 成功则跳转下载界面 → 失败弹警告
-- [x] 前端：新建 `src/components/DownloadPage.tsx` —— 下载进度条、传输速度、取消按钮
-- [x] 前端 App.css：文件分享/下载页面样式（复用 CSS 变量体系）
-
-#### 阶段六：设置与集成 ✅
-- [x] 前端 SettingsPage：新增「mDNS 发现名」输入框（默认 MAC 地址，持久化到 settings.json）
-- [x] Rust 后端：添加 `permission` 声明（网络访问等）到 `capabilities/default.json`
-- [x] 验收测试：两台设备在同一局域网下测试发现、分享、下载全流程
-
-### Session 2026-07-10 — P2P 下载性能优化 + 取消下载 + 设备名称展示
-参考 `report.md` 前三项建议，对 P2P 文件下载进行了架构级重构：
-
-**优化一：滑动窗口并发下载**
-- `download_file` 从串行逐块请求改为 `futures::stream::buffer_unordered` 滑动窗口模式
-- 16 路并发，通过 `tokio::sync::Semaphore` 控制并发度
-- 块可能乱序到达，使用 `tokio::fs::File::seek` + `write_all` 写入正确偏移
-
-**优化二：消除 Swarm 锁瓶颈**
-- 引入 `Command` 枚举（`SendRequest` / `CancelDownload`），通过 `mpsc::unbounded_channel` 通信
-- 主循环独占 Swarm 所有权（不再使用 `Arc<Mutex<Swarm>>）`，消除锁竞争
-- 下载任务通过 Command channel 发送块请求，主循环单线程处理 Swarm 交互
-
-**优化三：异步文件读写**
-- `read_chunk_sync`（`std::fs` 同步阻塞）改为 `read_chunk_async`（`tokio::fs` 异步 IO）
-- 下载写入也改为 `tokio::fs::File` 异步操作
-- `Cargo.toml` 的 tokio features 添加 `fs` 和 `time`
-
-**取消下载**
-- `P2PState` 新增 `cancel_tokens: HashMap<String, Arc<AtomicBool>>`，按哈希索引活跃下载的取消令牌
-- 新增 `cancel_download` Tauri command，通过 `Command::CancelDownload` 设置取消令牌
-- `download_file` 在每块请求前后检查取消令牌，取消时删除部分文件并发 `download:error` 事件
-- 前端 `DownloadPage` 新增「停止下载」危险按钮，`App.tsx` 新增 `handleCancelDownload`
-
-**设备名称展示**
-- `DownloadProgress` 新增 `target_peer_id` 字段，所有下载事件携带对等节点 PeerId
-- 前端 `DownloadState` 新增 `targetPeerId`，`DownloadPage` 在下载中/完成/失败状态下均显示"来源设备"
-- PeerId 显示为前 8 后 6 截断格式（如 `12D3KooW...abcdef`）
-- `App.css` 新增 `.download-peer` / `.download-actions` / `.download-cancel-btn` 样式
-
-**验证**：`cargo check`（仅 `FileEntry.register_timestamp` + `DownloadProgress` 未使用两个无害警告）+ `tsc --noEmit` 均通过
-
-### Session 2026-07-10 — 下载界面重构
-- **移除 antd Result 依赖**：下载完成/失败状态从 antd `Result` 改为统一的自定义卡片布局
-- **错误文字修正**：`download-error-msg` 使用 `--color-text`，不再受 antd 内置 `rgba(0,0,0,0.45)` 影响
-- **三种状态统一**：下载中/完成/失败均使用 `.download-card` + 状态图标（圆形彩色图标）+ 元信息区 + 操作按钮
-- **元信息区重构**：标签-值两列布局（`.dl-label` / `.dl-value`），信息区带浅色背景面板
-- **清除旧样式**：移除 `.download-hash`、`.download-name`、`.download-peer`、`.download-hint`、`.download-cancel-btn` 等碎片类，统一为 `.download-meta-row` 体系
-- **验证**：`tsc --noEmit` 通过
-
-### Session 2026-07-10 — 本机 PeerID 展示 + 局域网节点列表
-- **P2P 节点名称 → 本机 PeerID**：移除无实际用途的"P2P 节点名称"设置项，改为展示本机 libp2p PeerID（只读）
-- **Rust 后端**：`P2PState` 新增 `local_peer_id: Option<String>` 字段，启动时由 `start_p2p_node` 写入；新增 `get_local_peer_id` Tauri command
-- **前端 SettingsPage**：移除 `peerName` 输入框，改为 `<code>` 块只读展示本机 PeerID；`App.tsx` 中轮询获取
-- **节点列表**：`FileSharePage` 拖放区域上方新增横向节点列表，每 5s 自动刷新
-  - 每个节点显示为 `.peer-chip` 圆角标签，展示 IP:端口地址
-  - 鼠标悬停 Tooltip 显示完整 PeerID + 所有 Multiaddr
-  - 竖向滚轮映射为横向滚动（`onWheel` → `scrollLeft`）
-- **CSS**：新增 `.peer-list-wrapper` / `.peer-list` / `.peer-chip` / `.setting-peer-id` 样式
-- **验证**：`cargo check` + `tsc --noEmit` 均通过
+- **Command channel**（`p2p::Command`）：业务层通过 `mpsc` 向主循环发送 `SendRequest` / `CancelDownload`，Swarm 由主循环独占，消除锁竞争
+- **并发下载**：`buffer_unordered(16)` + `Semaphore`，块可能乱序到达，用 `tokio::fs::File::seek` 写入正确偏移
+- **异步 IO**：文件读写全程 `tokio::fs`，不阻塞事件循环
+- **取消**：`AtomicBool` 令牌按哈希索引，每块请求前后检查
 
 ### 注意事项
 
-- libp2p 依赖较大（编译时间显著增加），首次 `cargo build` 需耐心等待
+- libp2p 编译时间较长，首次 `cargo build` 需耐心等待
 - mDNS 仅在同一子网内有效，不支持跨子网发现
-- 文件传输目前不实现断点续传（v1 范围外）
-- 哈希值需考虑展示截断（前 8 位 + "..." + 后 8 位），方便手动输入和比对
+- 文件传输不实现断点续传（v1 范围外）
+- 哈希值展示截断为前 8 位 + "..." + 后 6 位
