@@ -7,7 +7,7 @@ interface Props {
   maxClipEntries: number; onSetMaxClipEntries: (m: number) => void;
   cleanupInterval: number; onSetCleanupInterval: (s: number) => void;
   shortcut: string; onSetShortcut: (s: string) => void;
-  peerName: string; onSetPeerName: (n: string) => void;
+  localPeerId: string;
   downloadDir: string; onSetDownloadDir: (d: string) => void;
   ready: boolean;
 }
@@ -15,7 +15,7 @@ interface Props {
 const MOD_ORDER: Record<string, number> = { Control: 0, Alt: 1, Shift: 2 };
 function modToLabel(k: string) { switch (k) { case "Control": return "Ctrl"; case "Alt": return "Alt"; case "Shift": return "Shift"; default: return k; } }
 
-function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipEntries, cleanupInterval, onSetCleanupInterval, shortcut, onSetShortcut, peerName, onSetPeerName, downloadDir, onSetDownloadDir, ready }: Props) {
+function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipEntries, cleanupInterval, onSetCleanupInterval, shortcut, onSetShortcut, localPeerId, downloadDir, onSetDownloadDir, ready }: Props) {
   const { notification } = App.useApp();
   const [capturing, setCapturing] = useState(false);
   const [capturedMods, setCapturedMods] = useState<string[]>([]);
@@ -52,8 +52,8 @@ function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipE
         <InputNumber variant="filled" min={8} max={1024} step={8} value={maxClipEntries} onChange={(v) => v !== null && onSetMaxClipEntries(v)} style={{ width: 120 }} /></div>
       <div className="setting-item"><span className="setting-label">清理间隔（秒）</span>
         <InputNumber variant="filled" min={10} max={3600} step={10} value={cleanupInterval} onChange={(v) => v !== null && onSetCleanupInterval(v)} style={{ width: 120 }} /></div>
-      <div className="setting-item"><span className="setting-label">P2P 节点名称</span>
-        <Input variant="filled" value={peerName} onChange={(e) => onSetPeerName(e.target.value)} placeholder="局域网中的发现名称" style={{ width: 220 }} /></div>
+      <div className="setting-item"><span className="setting-label">本机 Peer ID</span>
+        <code className="setting-peer-id">{localPeerId || "获取中..."}</code></div>
       <div className="setting-item"><span className="setting-label">下载路径</span>
         <Input variant="filled" value={downloadDir} onChange={(e) => onSetDownloadDir(e.target.value)} placeholder="文件下载保存目录" style={{ width: 300 }} /></div>
       <div className="setting-item"><span className="setting-label">全局快捷键</span>

@@ -37,6 +37,8 @@ export interface DownloadState {
   received?: number;
   total?: number;
   error?: string;
+  /** 对等节点的 PeerId（用于展示设备名称） */
+  targetPeerId?: string;
 }
 
 type Tab = "clipboard" | "fileshare" | "settings";
@@ -55,7 +57,6 @@ const MAX_CLIP_ENTRIES_KEY = "maxClipEntries";
 const CLEANUP_INTERVAL_KEY = "cleanupInterval";
 const CLIPBOARD_DATA_KEY = "clipboardData";
 const SHORTCUT_KEY = "globalShortcut";
-const PEER_NAME_KEY = "peerName";
 const DOWNLOAD_DIR_KEY = "downloadDir";
 const DEFAULT_SHORTCUT = "Ctrl+Alt+Q";
 const DEFAULT_MAX_ENTRIES = 32;
@@ -103,7 +104,7 @@ function App() {
   const [clipReady, setClipReady] = useState(false);
   const [cleanupInterval, setCleanupInterval] = useState(DEFAULT_CLEANUP_INTERVAL);
   const [shortcut, setShortcut] = useState(DEFAULT_SHORTCUT);
-  const [peerName, setPeerName] = useState("");
+  const [localPeerId, setLocalPeerId] = useState("");
   const [downloadDirState, setDownloadDirState] = useState("");
   const [download, setDownload] = useState<DownloadState | null>(null);
 
@@ -165,9 +166,6 @@ function App() {
         if (typeof ci === "number") setCleanupInterval(Math.min(3600, Math.max(10, ci)));
         const sc = await ss.get<string>(SHORTCUT_KEY);
         if (typeof sc === "string" && sc.trim().length > 0) setShortcut(sc.trim());
-        const pn = await ss.get<string>(PEER_NAME_KEY);
-        if (typeof pn === "string" && pn.trim().length > 0) setPeerName(pn.trim());
-        else { try { setPeerName(await invoke<string>("get_default_peer_name")); } catch { setPeerName("Unknown"); } }
         const dd = await ss.get<string>(DOWNLOAD_DIR_KEY);
         if (typeof dd === "string" && dd.trim().length > 0) setDownloadDirState(dd.trim());
         else { try { setDownloadDirState(await downloadDir()); } catch { setDownloadDirState(""); } }
@@ -249,10 +247,6 @@ function App() {
     const t = sc.trim(); if (!t) return; setShortcut(t);
     try { const s = await load(SETTINGS_STORE, { autoSave: false, defaults: {} }); await s.set(SHORTCUT_KEY, t); await s.save(); } catch {}
   }, []);
-  const handleSetPeerName = useCallback(async (n: string) => {
-    const t = n.trim(); if (!t) return; setPeerName(t);
-    try { const s = await load(SETTINGS_STORE, { autoSave: false, defaults: {} }); await s.set(PEER_NAME_KEY, t); await s.save(); } catch {}
-  }, []);
   const handleSetDownloadDir = useCallback(async (d: string) => {
     const t = d.trim(); if (!t) return; setDownloadDirState(t);
     try { const s = await load(SETTINGS_STORE, { autoSave: false, defaults: {} }); await s.set(DOWNLOAD_DIR_KEY, t); await s.save(); } catch {}
@@ -303,6 +297,21 @@ function App() {
     return () => { ul?.(); };
   }, []);
 
+  // ===== 本机 PeerId =====
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval>;
+    const fetch = async () => {
+      try {
+        const pid = await invoke<string>("get_local_peer_id");
+        if (!cancelled && pid) { setLocalPeerId(pid); clearInterval(timer); }
+      } catch {}
+    };
+    fetch();
+    timer = setInterval(fetch, 1500);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
   // ===== 下载事件监听 =====
   useEffect(() => {
     const handles: UnlistenFn[] = [];
@@ -313,6 +322,7 @@ function App() {
           hash: p.hash, status: "downloading",
           fileName: p.file_name, filePath: p.file_path,
           received: p.received, total: p.total,
+          targetPeerId: p.target_peer_id,
         });
       }));
       handles.push(await listen<any>("download:done", (e) => {
@@ -321,11 +331,12 @@ function App() {
           hash: p.hash, status: "done",
           fileName: p.file_name, filePath: p.file_path,
           received: p.size, total: p.size,
+          targetPeerId: p.target_peer_id,
         });
       }));
       handles.push(await listen<any>("download:error", (e) => {
         const p = e.payload;
-        setDownload({ hash: p.hash, status: "error", error: p.error });
+        setDownload({ hash: p.hash, status: "error", error: p.error, targetPeerId: p.target_peer_id });
       }));
     })();
     return () => { handles.forEach((h) => h()); };
@@ -345,13 +356,26 @@ function App() {
     }
   }, [downloadDirState, notification]);
 
+  // ===== 取消下载 =====
+  const handleCancelDownload = useCallback(async (hash: string) => {
+    try {
+      await invoke("cancel_download", { hash });
+    } catch (e) {
+      notification.error({ message: `取消失败: ${e}`, placement: "bottomRight" });
+    }
+  }, [notification]);
+
   // ===== 渲染 =====
 
   return (
     <div className="app-container">
       <main className="tab-content">
         {download && activeTab !== "settings" ? (
-          <DownloadPage download={download} onBack={() => setDownload(null)} />
+          <DownloadPage
+            download={download}
+            onBack={() => setDownload(null)}
+            onCancel={() => handleCancelDownload(download.hash)}
+          />
         ) : (
           <>
             {activeTab === "clipboard" && clipReady && (
@@ -366,7 +390,7 @@ function App() {
                 maxClipEntries={maxEntries} onSetMaxClipEntries={handleSetMaxEntries}
                 cleanupInterval={cleanupInterval} onSetCleanupInterval={handleSetCleanupInterval}
                 shortcut={shortcut} onSetShortcut={handleSetShortcut}
-                peerName={peerName} onSetPeerName={handleSetPeerName}
+                localPeerId={localPeerId}
                 downloadDir={downloadDirState} onSetDownloadDir={handleSetDownloadDir}
                 ready={themeReady} />
             )}

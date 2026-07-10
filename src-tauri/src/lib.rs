@@ -117,8 +117,9 @@ fn get_quick_selector_url(_app: &tauri::AppHandle) -> WebviewUrl {
 struct FileRegisterResult { hash: String, file_name: String, file_path: String, file_size: u64, timestamp: u64 }
 
 #[tauri::command]
-fn get_default_peer_name() -> String {
-    mac_address::get_mac_address().ok().flatten().map(|m| m.to_string()).unwrap_or_else(|| "Unknown".into())
+async fn get_local_peer_id(state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>) -> Result<String, String> {
+    let s = state.lock().await;
+    s.local_peer_id.clone().ok_or_else(|| "P2P 节点尚未初始化".into())
 }
 
 #[tauri::command]
@@ -147,6 +148,15 @@ fn request_file(hash: String, save_dir: String, state: tauri::State<'_, Arc<toki
     let p2p = state.try_lock().map_err(|e| format!("{}", e))?;
     match &p2p.download_tx {
         Some(tx) => tx.send(p2p::DownloadRequest { hash, save_dir }).map_err(|e| format!("{}", e)),
+        None => Err("P2P 未初始化".into()),
+    }
+}
+
+#[tauri::command]
+async fn cancel_download(hash: String, state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>) -> Result<(), String> {
+    let p2p = state.lock().await;
+    match &p2p.cmd_tx {
+        Some(tx) => tx.send(p2p::Command::CancelDownload { hash }).map_err(|e| format!("{}", e)),
         None => Err("P2P 未初始化".into()),
     }
 }
@@ -204,7 +214,10 @@ pub fn run() {
             let p2p_state = Arc::new(tokio::sync::Mutex::new(p2p::P2PState {
                 peers: std::collections::HashMap::new(),
                 file_registry: std::collections::HashMap::new(),
+                local_peer_id: None,  // 由 start_p2p_node 设置
                 download_tx: Some(download_tx),
+                cmd_tx: None,  // 由 start_p2p_node 设置
+                cancel_tokens: std::collections::HashMap::new(),
                 app_handle: Some(app.handle().clone()),
             }));
             app.manage(p2p_state.clone());
@@ -221,8 +234,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             cleanup_orphan_images, show_quick_selector, hide_quick_selector,
-            get_quick_selector_entries, get_default_peer_name, register_file,
-            request_file, get_peer_list,
+            get_quick_selector_entries, get_local_peer_id, register_file,
+            request_file, cancel_download, get_peer_list,
         ])
         .run(tauri::generate_context!())
         .expect("启动失败");

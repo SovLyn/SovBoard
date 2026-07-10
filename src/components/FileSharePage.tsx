@@ -1,12 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button, Input, message, Tooltip } from "antd";
+import { Button, Input, Tooltip, App } from "antd";
 import { CopyOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 interface SharedFile {
   hash: string; file_name: string; file_path: string; file_size: number; timestamp: number;
+}
+
+interface PeerInfo {
+  peer_id: string;
+  addresses: string[];
 }
 
 function formatSize(bytes: number): string {
@@ -24,7 +29,10 @@ function truncateHash(hash: string): string {
   if (hash.length <= 20) return hash;
   return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 }
-
+function extractIpPort(addr: string): string | null {
+  const m = addr.match(/\/ip[46]\/([^/]+)\/tcp\/(\d+)/);
+  return m ? `${m[1]}:${m[2]}` : null;
+}
 interface Props {
   downloadDir: string;
   onStartDownload: (hash: string) => void;
@@ -36,8 +44,11 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
   const [loading, setLoading] = useState(false);
   const [hashInput, setHashInput] = useState("");
   const [searching, setSearching] = useState(false);
-  const [messageApi, ctx] = message.useMessage();
+  const { message: messageApi } = App.useApp();
+  const [peers, setPeers] = useState<PeerInfo[]>([]);
+  const peerListRef = useRef<HTMLDivElement>(null);
 
+  // 拖放文件
   useEffect(() => {
     let ul: UnlistenFn | undefined;
     (async () => {
@@ -61,6 +72,27 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
     return () => { ul?.(); };
   }, [messageApi]);
 
+  // 定时刷新节点列表
+  useEffect(() => {
+    const fetchPeers = async () => {
+      try {
+        const list = await invoke<PeerInfo[]>("get_peer_list");
+        setPeers(list);
+      } catch {}
+    };
+    fetchPeers();
+    const timer = setInterval(fetchPeers, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 竖向滚轮 → 横向滚动
+  const handlePeerListWheel = useCallback((e: React.WheelEvent) => {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
+  }, []);
+
   const handleSearch = useCallback(async () => {
     const h = hashInput.trim();
     if (!h) return;
@@ -79,11 +111,10 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
 
   return (
     <div className="page file-share-page">
-      {ctx}
-
       {/* 哈希查找 */}
       <div className="hash-lookup">
         <Input
+          variant="filled"
           placeholder="输入文件哈希值查找下载..."
           value={hashInput}
           onChange={(e) => setHashInput(e.target.value)}
@@ -92,6 +123,30 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
         />
         <Button type="primary" icon={<SearchOutlined />} loading={searching}
           onClick={handleSearch}>查找</Button>
+      </div>
+
+      {/* 局域网节点列表 */}
+      <div className="peer-list-wrapper">
+        <div className="peer-list-label">局域网节点</div>
+        <div
+          className="peer-list"
+          ref={peerListRef}
+          onWheel={handlePeerListWheel}
+        >
+          {peers.length === 0 ? (
+            <span className="peer-list-empty">未发现其他节点</span>
+          ) : (
+            peers.map((p) => {
+              const ip = p.addresses.map(extractIpPort).find(Boolean)
+                ?? p.peer_id.slice(0, 12) + "...";
+              return (
+                <Tooltip key={p.peer_id} title={p.peer_id} placement="bottom">
+                  <div className="peer-chip">{ip}</div>
+                </Tooltip>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* 拖放区域 */}

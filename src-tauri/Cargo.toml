@@ -38,7 +38,7 @@ libp2p = { version = "0.54", features = [
     "cbor",
     "macros",
 ] }
-tokio = { version = "1", features = ["sync", "rt", "macros"] }
+tokio = { version = "1", features = ["sync", "rt", "macros", "fs", "time"] }
 futures = "0.3"
 tracing = "0.1"
 mac_address = "1.1"

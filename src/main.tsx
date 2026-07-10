@@ -13,14 +13,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   ) : (
     <ConfigProvider
       theme={{
-        token: {
-          colorFillTertiary: "var(--color-accent-hover)",
-        },
         components: {
-          InputNumber: {
-            filledHandleBg: "var(--color-accent)",
-            handleHoverColor: "var(--color-accent-hover)",
-          },
           Input: {
             activeBorderColor: "var(--color-accent)",
             hoverBorderColor: "var(--color-accent-hover)",

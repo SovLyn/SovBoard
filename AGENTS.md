@@ -475,6 +475,57 @@ docs: 补充架构说明和开发命令
 - [x] Rust 后端：添加 `permission` 声明（网络访问等）到 `capabilities/default.json`
 - [x] 验收测试：两台设备在同一局域网下测试发现、分享、下载全流程
 
+### Session 2026-07-10 — P2P 下载性能优化 + 取消下载 + 设备名称展示
+参考 `report.md` 前三项建议，对 P2P 文件下载进行了架构级重构：
+
+**优化一：滑动窗口并发下载**
+- `download_file` 从串行逐块请求改为 `futures::stream::buffer_unordered` 滑动窗口模式
+- 16 路并发，通过 `tokio::sync::Semaphore` 控制并发度
+- 块可能乱序到达，使用 `tokio::fs::File::seek` + `write_all` 写入正确偏移
+
+**优化二：消除 Swarm 锁瓶颈**
+- 引入 `Command` 枚举（`SendRequest` / `CancelDownload`），通过 `mpsc::unbounded_channel` 通信
+- 主循环独占 Swarm 所有权（不再使用 `Arc<Mutex<Swarm>>）`，消除锁竞争
+- 下载任务通过 Command channel 发送块请求，主循环单线程处理 Swarm 交互
+
+**优化三：异步文件读写**
+- `read_chunk_sync`（`std::fs` 同步阻塞）改为 `read_chunk_async`（`tokio::fs` 异步 IO）
+- 下载写入也改为 `tokio::fs::File` 异步操作
+- `Cargo.toml` 的 tokio features 添加 `fs` 和 `time`
+
+**取消下载**
+- `P2PState` 新增 `cancel_tokens: HashMap<String, Arc<AtomicBool>>`，按哈希索引活跃下载的取消令牌
+- 新增 `cancel_download` Tauri command，通过 `Command::CancelDownload` 设置取消令牌
+- `download_file` 在每块请求前后检查取消令牌，取消时删除部分文件并发 `download:error` 事件
+- 前端 `DownloadPage` 新增「停止下载」危险按钮，`App.tsx` 新增 `handleCancelDownload`
+
+**设备名称展示**
+- `DownloadProgress` 新增 `target_peer_id` 字段，所有下载事件携带对等节点 PeerId
+- 前端 `DownloadState` 新增 `targetPeerId`，`DownloadPage` 在下载中/完成/失败状态下均显示"来源设备"
+- PeerId 显示为前 8 后 6 截断格式（如 `12D3KooW...abcdef`）
+- `App.css` 新增 `.download-peer` / `.download-actions` / `.download-cancel-btn` 样式
+
+**验证**：`cargo check`（仅 `FileEntry.register_timestamp` + `DownloadProgress` 未使用两个无害警告）+ `tsc --noEmit` 均通过
+
+### Session 2026-07-10 — 下载界面重构
+- **移除 antd Result 依赖**：下载完成/失败状态从 antd `Result` 改为统一的自定义卡片布局
+- **错误文字修正**：`download-error-msg` 使用 `--color-text`，不再受 antd 内置 `rgba(0,0,0,0.45)` 影响
+- **三种状态统一**：下载中/完成/失败均使用 `.download-card` + 状态图标（圆形彩色图标）+ 元信息区 + 操作按钮
+- **元信息区重构**：标签-值两列布局（`.dl-label` / `.dl-value`），信息区带浅色背景面板
+- **清除旧样式**：移除 `.download-hash`、`.download-name`、`.download-peer`、`.download-hint`、`.download-cancel-btn` 等碎片类，统一为 `.download-meta-row` 体系
+- **验证**：`tsc --noEmit` 通过
+
+### Session 2026-07-10 — 本机 PeerID 展示 + 局域网节点列表
+- **P2P 节点名称 → 本机 PeerID**：移除无实际用途的"P2P 节点名称"设置项，改为展示本机 libp2p PeerID（只读）
+- **Rust 后端**：`P2PState` 新增 `local_peer_id: Option<String>` 字段，启动时由 `start_p2p_node` 写入；新增 `get_local_peer_id` Tauri command
+- **前端 SettingsPage**：移除 `peerName` 输入框，改为 `<code>` 块只读展示本机 PeerID；`App.tsx` 中轮询获取
+- **节点列表**：`FileSharePage` 拖放区域上方新增横向节点列表，每 5s 自动刷新
+  - 每个节点显示为 `.peer-chip` 圆角标签，展示 IP:端口地址
+  - 鼠标悬停 Tooltip 显示完整 PeerID + 所有 Multiaddr
+  - 竖向滚轮映射为横向滚动（`onWheel` → `scrollLeft`）
+- **CSS**：新增 `.peer-list-wrapper` / `.peer-list` / `.peer-chip` / `.setting-peer-id` 样式
+- **验证**：`cargo check` + `tsc --noEmit` 均通过
+
 ### 注意事项
 
 - libp2p 依赖较大（编译时间显著增加），首次 `cargo build` 需耐心等待
