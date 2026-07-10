@@ -6,8 +6,8 @@
 //! - Command channel 模式 → 消除 Swarm 锁竞争
 //! - tokio::fs 异步 IO → 避免阻塞事件循环
 
+use log::{error, info, warn};
 use std::collections::HashMap;
-use log::{info, warn, error};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -58,9 +58,7 @@ pub enum Command {
         resp_tx: oneshot::Sender<FileResponse>,
     },
     /// 取消某个哈希的下载
-    CancelDownload {
-        hash: String,
-    },
+    CancelDownload { hash: String },
 }
 
 // ---- P2P 状态 ----
@@ -355,13 +353,14 @@ async fn download_file(
     let fname = &r0.file_name;
     let fs = r0.file_size;
     let tc = r0.total_chunks;
-    let save_path = format!(
-        "{}/{}",
-        save_dir.trim_end_matches(&['/', '\\'][..]),
-        fname
-    );
+    let save_path = format!("{}/{}", save_dir.trim_end_matches(&['/', '\\'][..]), fname);
 
-    info!("[p2p::download] 开始下载: {} ({:.1} MB, {} chunks)", fname, fs as f64 / 1e6, tc);
+    info!(
+        "[p2p::download] 开始下载: {} ({:.1} MB, {} chunks)",
+        fname,
+        fs as f64 / 1e6,
+        tc
+    );
 
     // 创建文件
     if let Some(p) = std::path::Path::new(&save_path).parent() {
@@ -391,7 +390,11 @@ async fn download_file(
     // 单块文件直接完成
     if tc <= 1 {
         file.flush().await.map_err(|e| format!("flush: {}", e))?;
-        info!("[p2p::download] 完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
+        info!(
+            "[p2p::download] 完成: {} ({:.1} MB)",
+            fname,
+            fs as f64 / 1e6
+        );
         report(
             "download:done",
             serde_json::json!({
@@ -494,7 +497,11 @@ async fn download_file(
     }
 
     file.flush().await.map_err(|e| format!("flush: {}", e))?;
-    info!("[p2p::download] 完成: {} ({:.1} MB)", fname, fs as f64 / 1e6);
+    info!(
+        "[p2p::download] 完成: {} ({:.1} MB)",
+        fname,
+        fs as f64 / 1e6
+    );
     report(
         "download:done",
         serde_json::json!({
