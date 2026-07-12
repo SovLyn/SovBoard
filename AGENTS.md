@@ -421,6 +421,14 @@ docs: 补充架构说明和开发命令
 - 现有 `log::info!`/`warn!`/`error!` 调用（p2p.rs 等）无需改动，自动双输出（控制台 + 文件）
 - **验证**：`cargo check` 通过
 
+### Session 2026-07-12 — 开机自启动功能
+- **Rust 后端**
+  - `Cargo.toml`：添加 `tauri-plugin-autostart = "2"` 依赖
+  - `lib.rs`：注册 `tauri_plugin_autostart` 插件
+- **前端**
+  - `package.json`：添加 `@ant-design/icons` + `@tauri-apps/plugin-autostart` 依赖
+- **权限**：新建 `src-tauri/capabilities/desktop.json`，添加 `autostart:default` 权限
+
 ## P2P 文件分享
 
 > 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）
