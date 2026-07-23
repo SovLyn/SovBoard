@@ -31,9 +31,7 @@ tauri-plugin-global-shortcut = "2"
 # ---- P2P 文件分享 ----
 libp2p = { version = "0.54", features = [
     "tokio",
-    "tcp",
-    "noise",
-    "yamux",
+    "quic",
     "mdns",
     "request-response",
     "cbor",

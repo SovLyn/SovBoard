@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button, Input, Tooltip, App } from "antd";
+import { Button, Input, Tooltip, App, Spin, Empty } from "antd";
 import { CopyOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -12,6 +12,12 @@ interface SharedFile {
 interface PeerInfo {
   peer_id: string;
   addresses: string[];
+}
+
+interface SearchResult {
+  hash: string;
+  file_name: string;
+  file_size: number;
 }
 
 function formatSize(bytes: number): string {
@@ -29,8 +35,28 @@ function truncateHash(hash: string): string {
   if (hash.length <= 20) return hash;
   return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 }
+/** 将哈希按子序列匹配拆分为 token，标记哪些字符被匹配 */
+function highlightMatch(
+  hash: string,
+  query: string,
+): { char: string; match: boolean }[] {
+  const ql = query.toLowerCase();
+  const hl = hash.toLowerCase();
+  const tokens: { char: string; match: boolean }[] = [];
+  let qi = 0;
+  for (const ch of hash) {
+    if (qi < ql.length && hl[tokens.length] === ql[qi]) {
+      tokens.push({ char: ch, match: true });
+      qi++;
+    } else {
+      tokens.push({ char: ch, match: false });
+    }
+  }
+  return tokens;
+}
+
 function extractIpPort(addr: string): string | null {
-  const m = addr.match(/\/ip[46]\/([^/]+)\/tcp\/(\d+)/);
+  const m = addr.match(/\/ip[46]\/([^/]+)\/(?:tcp|udp)\/(\d+)/);
   return m ? `${m[1]}:${m[2]}` : null;
 }
 interface Props {
@@ -47,6 +73,10 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
   const { message: messageApi } = App.useApp();
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const peerListRef = useRef<HTMLDivElement>(null);
+
+  // ---- 搜索状态 ----
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchState, setSearchState] = useState<"idle" | "busy" | "results" | "empty">("idle");
 
   // 拖放文件
   useEffect(() => {
@@ -93,6 +123,30 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
     }
   }, []);
 
+  // 子序列搜索（debounce 300ms）
+  useEffect(() => {
+    const q = hashInput.trim();
+    if (q.length < 4 || q.length >= 64) {
+      setSearchState("idle");
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchState("busy");
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await invoke<SearchResult[]>("search_files", { query: q });
+        setSearchResults(results);
+        setSearchState(results.length > 0 ? "results" : "empty");
+      } catch {
+        setSearchState("idle");
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [hashInput]);
+
   const handleSearch = useCallback(async () => {
     const h = hashInput.trim();
     if (!h) return;
@@ -105,24 +159,83 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
       return;
     }
     setSearching(true);
+    setSearchState("idle");
     onStartDownload(h);
     setSearching(false);
   }, [hashInput, downloadDir, onStartDownload, messageApi]);
 
+  const handleResultClick = useCallback((hash: string) => {
+    setHashInput(hash);
+    setSearchState("idle");
+  }, []);
+
   return (
     <div className="page file-share-page">
       {/* 哈希查找 */}
-      <div className="hash-lookup">
-        <Input
-          variant="filled"
-          placeholder="输入文件哈希值查找下载..."
-          value={hashInput}
-          onChange={(e) => setHashInput(e.target.value)}
-          onPressEnter={handleSearch}
-          style={{ flex: 1 }}
-        />
-        <Button type="primary" icon={<SearchOutlined />} loading={searching}
-          onClick={handleSearch}>查找</Button>
+      <div className="hash-lookup-wrapper">
+        <div className="hash-lookup">
+          <Input
+            variant="filled"
+            placeholder="输入文件哈希查找下载..."
+            value={hashInput}
+            onChange={(e) => setHashInput(e.target.value)}
+            onPressEnter={handleSearch}
+            style={{ flex: 1 }}
+          />
+          <Button type="primary" icon={<SearchOutlined />} loading={searching}
+            onClick={handleSearch}>查找</Button>
+        </div>
+
+        {/* 搜索下拉 */}
+        {searchState !== "idle" && (
+          <div className="search-dropdown">
+            {searchState === "busy" && (
+              <div className="search-dropdown-status">
+                <Spin size="small" /> <span style={{ marginLeft: 8 }}>搜索中...</span>
+              </div>
+            )}
+            {searchState === "empty" && (
+              <div className="search-dropdown-status">
+                <Empty description="无匹配结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              </div>
+            )}
+            {searchState === "results" &&
+              searchResults.map((r) => (
+                <div
+                  key={r.hash}
+                  className="search-result-item"
+                  onClick={() => handleResultClick(r.hash)}
+                >
+                  <span className="search-result-name">{r.file_name}</span>
+                  <span className="search-result-size">{formatSize(r.file_size)}</span>
+                  <code className="search-result-hash">
+                    {(() => {
+                      const tokens = highlightMatch(r.hash, hashInput.trim());
+                      // 只显示前 24 + 后 8 截断，但确保高亮保留
+                      if (tokens.length <= 32) {
+                        return tokens.map((t, i) => (
+                          <span key={i} className={t.match ? "search-result-highlight" : undefined}>{t.char}</span>
+                        ));
+                      }
+                      const head = tokens.slice(0, 24);
+                      const tail = tokens.slice(-8);
+                      return (
+                        <>
+                          {head.map((t, i) => (
+                            <span key={i} className={t.match ? "search-result-highlight" : undefined}>{t.char}</span>
+                          ))}
+                          <span className="search-result-ellipsis">...</span>
+                          {tail.map((t, i) => (
+                            <span key={`t${i}`} className={t.match ? "search-result-highlight" : undefined}>{t.char}</span>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </code>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
 
       {/* 局域网节点列表 */}

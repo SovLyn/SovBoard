@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -294,6 +295,61 @@ async fn cancel_download(
 }
 
 #[tauri::command]
+async fn search_files(
+    query: String,
+    state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
+) -> Result<Vec<p2p::SearchResult>, String> {
+    if query.len() < 4 {
+        return Err("搜索词至少4个字符".into());
+    }
+    if query.len() >= 64 {
+        return Err("搜索词过长".into());
+    }
+
+    let (peers, cmd_tx) = {
+        let s = state.lock().await;
+        (s.peers.keys().cloned().collect::<Vec<_>>(), s.cmd_tx.clone())
+    };
+
+    let cmd_tx = cmd_tx.ok_or("P2P 未初始化")?;
+
+    if peers.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut handles = vec![];
+    for peer in peers {
+        let (tx, rx) = oneshot::channel();
+        let cmd_tx_c = cmd_tx.clone();
+        let query_c = query.clone();
+        handles.push(tokio::spawn(async move {
+            if cmd_tx_c
+                .send(p2p::Command::SearchQuery {
+                    target: peer,
+                    query: query_c,
+                    resp_tx: tx,
+                })
+                .is_err()
+            {
+                return vec![];
+            }
+            match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+                Ok(Ok(resp)) => resp.results,
+                _ => vec![],
+            }
+        }));
+    }
+
+    let results: Vec<p2p::SearchResult> = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .flatten()
+        .collect();
+    Ok(results)
+}
+
+#[tauri::command]
 async fn get_peer_list(
     state: tauri::State<'_, Arc<tokio::sync::Mutex<p2p::P2PState>>>,
 ) -> Result<Vec<PeerInfo>, String> {
@@ -431,6 +487,7 @@ pub fn run() {
             register_file,
             request_file,
             cancel_download,
+            search_files,
             get_peer_list,
         ])
         .run(tauri::generate_context!())

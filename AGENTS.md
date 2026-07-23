@@ -429,6 +429,23 @@ docs: 补充架构说明和开发命令
   - `package.json`：添加 `@ant-design/icons` + `@tauri-apps/plugin-autostart` 依赖
 - **权限**：新建 `src-tauri/capabilities/desktop.json`，添加 `autostart:default` 权限
 
+### Session 2026-07-23 — P2P 迁移 QUIC + 局域网子序列搜索
+- **QUIC 迁移**
+  - `Cargo.toml`：libp2p features 从 `tcp/noise/yamux` 替换为 `quic`
+  - `p2p.rs`：`SwarmBuilder` 从 `.with_tcp()` 改为 `.with_quic()`，监听地址从 `/tcp/0` 改为 `/udp/0/quic-v1`
+  - QUIC 原生 TLS 1.3 加密 + 多路复用，不再需要 Noise + Yamux
+- **子序列搜索**
+  - 新增 `/sovboard-search/1` request_response 协议：`SearchRequest` / `SearchResponse` / `SearchResult`
+  - `Command` 枚举新增 `SearchQuery` 变体；主事件循环新增搜索请求/响应处理
+  - `is_subsequence_match()`：O(n) 子序列匹配（如 `abcd` 可匹配 `fafbfcfdf`）
+  - `search_files` Tauri command：广播搜索到所有在线节点，5s 超时聚合结果
+- **前端**
+  - `FileSharePage.tsx`：输入 ≥4 且 <64 字符时自动 debounce 300ms 触发搜索
+  - 下拉菜单三种状态：`busy`（antd `Spin`）、`empty`（antd `Empty`）、结果列表
+  - 点击结果自动填入完整哈希到输入框
+  - `App.css`：新增 `.hash-lookup-wrapper` / `.search-dropdown` / `.search-result-item` 样式
+- **验证**：`cargo check`（零 warning）+ `tsc --noEmit` 均通过
+
 ## P2P 文件分享
 
 > 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）
@@ -439,7 +456,7 @@ docs: 补充架构说明和开发命令
 
 | 层       | 技术                    | 用途                       |
 |----------|------------------------|----------------------------|
-| 网络传输 | `rust-libp2p`          | P2P 网络栈（TCP + Noise + Yamux） |
+| 网络传输 | `rust-libp2p`          | P2P 网络栈（QUIC） |
 | 服务发现 | libp2p-mDNS            | 局域网自动发现对等节点       |
 | 内容寻址 | SHA-256                | 文件哈希，作为内容标识符     |
 | 文件传输 | libp2p-request-response | 请求/响应模式，单块 ≤ 64KB |

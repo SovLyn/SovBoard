@@ -933,3 +933,81 @@ button:active {
 .theme-dark .ant-input-number-filled .ant-input-number-input {
   color: #f6f6f6;
 }
+
+/* ===== 搜索下拉 ===== */
+.hash-lookup-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.search-dropdown-status {
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.15s;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: rgba(100, 108, 255, 0.08);
+}
+
+.theme-dark .search-result-item:hover {
+  background: rgba(124, 140, 248, 0.1);
+}
+
+.search-result-name {
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.search-result-size {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.search-result-hash {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--color-accent);
+  margin-left: auto;
+}
+
+.search-result-highlight {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+.search-result-ellipsis {
+  color: var(--color-text-secondary);
+}

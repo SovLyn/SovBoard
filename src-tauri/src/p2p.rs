@@ -1,7 +1,8 @@
 //! P2P 局域网文件分享 — libp2p 节点模块。
 //!
 //! - mDNS → 局域网节点发现
-//! - request_response（块级流式）→ 单块 ≤ 64KB，防 OOM
+//! - QUIC transport → 原生加密 + 多路复用（替代 TCP+Noise+Yamux）
+//! - request_response（块级流式 / 搜索）→ 单块 ≤ 64KB，防 OOM
 //! - 滑动窗口并发下载（16 并发）→ 消除串行瓶颈
 //! - Command channel 模式 → 消除 Swarm 锁竞争
 //! - tokio::fs 异步 IO → 避免阻塞事件循环
@@ -14,10 +15,10 @@ use std::time::Duration;
 
 use futures::stream::{self, StreamExt};
 use libp2p::{
-    identity, mdns, noise,
+    identity, mdns,
     request_response::{self, OutboundRequestId, ProtocolSupport},
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
+    Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
 };
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
@@ -47,6 +48,25 @@ pub struct FileResponse {
     pub error: Option<String>,
 }
 
+// ---- 搜索协议类型 ----
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchRequest {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub results: Vec<SearchResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub hash: String,
+    pub file_name: String,
+    pub file_size: u64,
+}
+
 // ---- Command channel（消除 Swarm 锁竞争） ----
 
 /// 业务层通过 Command channel 向主循环发送指令，主循环单线程访问 Swarm。
@@ -59,6 +79,12 @@ pub enum Command {
     },
     /// 取消某个哈希的下载
     CancelDownload { hash: String },
+    /// 向目标节点发送搜索请求
+    SearchQuery {
+        target: PeerId,
+        query: String,
+        resp_tx: oneshot::Sender<SearchResponse>,
+    },
 }
 
 // ---- P2P 状态 ----
@@ -95,6 +121,7 @@ pub struct DownloadRequest {
 }
 
 type RespRouter = Arc<Mutex<HashMap<OutboundRequestId, oneshot::Sender<FileResponse>>>>;
+type SearchRouter = Arc<Mutex<HashMap<OutboundRequestId, oneshot::Sender<SearchResponse>>>>;
 
 // ---- NetworkBehaviour ----
 
@@ -102,6 +129,27 @@ type RespRouter = Arc<Mutex<HashMap<OutboundRequestId, oneshot::Sender<FileRespo
 struct P2PBehaviour {
     mdns: mdns::tokio::Behaviour,
     file_exchange: request_response::cbor::Behaviour<FileRequest, FileResponse>,
+    search: request_response::cbor::Behaviour<SearchRequest, SearchResponse>,
+}
+
+// ---- 子序列匹配 ----
+
+/// 检查 query 中的字符是否按序出现在 hash 中（不要求连续，只要求顺序）。
+/// 例如 query="abcd" 可匹配 "fafbfcfdf"。
+fn is_subsequence_match(query: &str, hash: &str) -> bool {
+    let query = query.to_lowercase();
+    let hash = hash.to_lowercase();
+    let mut q_chars = query.chars();
+    let mut current = q_chars.next();
+    for hc in hash.chars() {
+        if Some(hc) == current {
+            current = q_chars.next();
+            if current.is_none() {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ---- start_p2p_node（主事件循环） ----
@@ -124,15 +172,12 @@ pub async fn start_p2p_node(
 
     let state_handler = state.clone();
     let resp_router: RespRouter = Arc::new(Mutex::new(HashMap::new()));
+    let search_router: SearchRouter = Arc::new(Mutex::new(HashMap::new()));
 
     // Swarm 由主循环独占，不再需要 Mutex 包裹
     let mut swarm = SwarmBuilder::with_existing_identity(id_keys)
         .with_tokio()
-        .with_tcp(
-            tcp::Config::default(),
-            noise::Config::new,
-            yamux::Config::default,
-        )?
+        .with_quic()
         .with_behaviour(|key| {
             let mdns =
                 mdns::tokio::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())?;
@@ -143,15 +188,23 @@ pub async fn start_p2p_node(
                 )],
                 request_response::Config::default(),
             );
+            let se = request_response::cbor::Behaviour::new(
+                [(
+                    StreamProtocol::new("/sovboard-search/1"),
+                    ProtocolSupport::Full,
+                )],
+                request_response::Config::default(),
+            );
             Ok(P2PBehaviour {
                 mdns,
                 file_exchange: fe,
+                search: se,
             })
         })?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
 
     loop {
         tokio::select! {
@@ -190,7 +243,22 @@ pub async fn start_p2p_node(
                             }
                         }
                     },
-                    P2PBehaviourEvent::FileExchange(_) => {}
+                    P2PBehaviourEvent::FileExchange(_) => {},
+                    // ---- 搜索事件 ----
+                    P2PBehaviourEvent::Search(
+                        request_response::Event::Message { message, .. }
+                    ) => match message {
+                        request_response::Message::Request { request, channel, .. } => {
+                            let resp = make_search_response(&state_handler, &request).await;
+                            let _ = swarm.behaviour_mut().search.send_response(channel, resp);
+                        }
+                        request_response::Message::Response { request_id, response } => {
+                            if let Some(tx) = search_router.lock().await.remove(&request_id) {
+                                let _ = tx.send(response);
+                            }
+                        }
+                    },
+                    P2PBehaviourEvent::Search(_) => {},
                 },
                 _ => {}
             },
@@ -233,7 +301,7 @@ pub async fn start_p2p_node(
                 }
             },
 
-            // ---- Command channel（SendRequest / CancelDownload） ----
+            // ---- Command channel（SendRequest / CancelDownload / SearchQuery） ----
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(Command::SendRequest { target, request, resp_tx }) => {
@@ -243,9 +311,13 @@ pub async fn start_p2p_node(
                     Some(Command::CancelDownload { hash }) => {
                         let s = state.lock().await;
                         if let Some(token) = s.cancel_tokens.get(&hash) {
-                            token.store(true, Ordering::Relaxed);
+                            token.store(true, Ordering::SeqCst);
                             info!("[p2p::download] 取消下载: {}", hash);
                         }
+                    }
+                    Some(Command::SearchQuery { target, query, resp_tx }) => {
+                        let rid = swarm.behaviour_mut().search.send_request(&target, SearchRequest { query });
+                        search_router.lock().await.insert(rid, resp_tx);
                     }
                     None => break,
                 }
@@ -304,6 +376,23 @@ async fn make_response(state: &Arc<Mutex<P2PState>>, req: &FileRequest) -> FileR
             }
         }
     }
+}
+
+// ---- make_search_response（搜索方，遍历本地 file_registry） ----
+
+async fn make_search_response(state: &Arc<Mutex<P2PState>>, req: &SearchRequest) -> SearchResponse {
+    let s = state.lock().await;
+    let results: Vec<SearchResult> = s
+        .file_registry
+        .iter()
+        .filter(|(hash, _)| is_subsequence_match(&req.query, hash))
+        .map(|(hash, entry)| SearchResult {
+            hash: hash.clone(),
+            file_name: entry.file_name.clone(),
+            file_size: entry.file_size,
+        })
+        .collect();
+    SearchResponse { results }
 }
 
 /// 异步读取文件块（tokio::fs，不阻塞事件循环）。
