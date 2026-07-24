@@ -53,3 +53,21 @@ jobs:
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
+          releaseDraft: true
+          releaseName: "sovboard v__VERSION__"
+          releaseBody: |
+            ## 变更
+
+            - 剪贴板历史管理（文本/HTML/图片/文件）
+            - P2P 局域网文件分享（QUIC + mDNS）
+            - 全局快捷键 QuickSelector
+            - 暗色模式（亮色/暗色/跟随系统）
+            - 系统托盘后台运行
+
+            ## 校验
+
+            | 平台 | SHA256 |
+            |------|--------|
+            | Windows | 见附件 |
+            | macOS | 见附件 |
+            | Linux | 见附件 |
