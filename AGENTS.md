@@ -446,6 +446,12 @@ docs: 补充架构说明和开发命令
   - `App.css`：新增 `.hash-lookup-wrapper` / `.search-dropdown` / `.search-result-item` 样式
 - **验证**：`cargo check`（零 warning）+ `tsc --noEmit` 均通过
 
+
+### Session 2026-07-24 — GitHub Actions release workflow + README/LICENSE
+- 创建 `.github/workflows/release.yml`：push `release` 分支触发三平台矩阵构建（ubuntu-22.04 / macos-latest / windows-latest），pnpm + tauri-action@v0
+- 补充 `README.md`：功能概览、技术栈、开发命令、MIT 许可证链接
+- 创建 `LICENSE`：MIT 许可证
+- 修改 `Cargo.toml`：authors = ["SovLyn"]，description 改为中文
 ## P2P 文件分享
 
 > 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）
