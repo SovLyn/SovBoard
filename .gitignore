@@ -44,7 +44,6 @@ Desktop.ini
 src-tauri/gen/schemas
 
 # pnpm
-pnpm-lock.yaml
 
 # TypeScript
 *.tsbuildinfo
