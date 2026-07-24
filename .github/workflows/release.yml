@@ -39,6 +39,7 @@ jobs:
           cache: pnpm
 
       - name: Create tag from version
+        shell: bash
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           TAG="v${VERSION}"
