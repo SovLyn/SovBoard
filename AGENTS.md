@@ -447,6 +447,13 @@ docs: 补充架构说明和开发命令
 - **验证**：`cargo check`（零 warning）+ `tsc --noEmit` 均通过
 
 
+### Session 2026-07-24 — 标签页状态保持修复
+- **修复**：切换标签页时 FileSharePage 状态丢失（已注册文件、输入框内容、搜索结果）
+- **方案**：将条件渲染 `{activeTab === "fileshare" && ...}` 改为 CSS `display: none` 控制显隐，所有标签页组件始终挂载，状态自然保留
+- **附带修复**：移除标签栏 `onClick` 中的 `setDownload(null)`，切换标签页不再清除下载状态
+- **一键清空**：FileSharePage 已分享文件列表新增 `Popconfirm` 清空全部按钮（含文件计数），配套 `.shared-files-header` / `.shared-files-count` CSS
+- **验证**：`tsc --noEmit` + `pnpm build` 均通过
+
 ### Session 2026-07-24 — GitHub Actions release workflow + README/LICENSE
 - 创建 `.github/workflows/release.yml`：push `release` 分支触发三平台矩阵构建（ubuntu-22.04 / macos-latest / windows-latest），pnpm + tauri-action@v0
 - 补充 `README.md`：功能概览、技术栈、开发命令、MIT 许可证链接

@@ -631,6 +631,17 @@ button:active {
   gap: 8px;
 }
 
+.shared-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shared-files-count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
 .shared-file-item {
   display: flex;
   align-items: center;

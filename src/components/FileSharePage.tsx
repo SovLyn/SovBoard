@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Button, Input, Tooltip, App, Spin, Empty } from "antd";
+import { Button, Input, Tooltip, App, Spin, Empty, Popconfirm } from "antd";
 import { CopyOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -271,6 +271,17 @@ function FileSharePage({ downloadDir, onStartDownload }: Props) {
 
       {files.length > 0 && (
         <div className="shared-files">
+          <div className="shared-files-header">
+            <span className="shared-files-count">{files.length} 个文件</span>
+            <Popconfirm
+              title="确定要清空全部已分享文件吗？"
+              onConfirm={() => setFiles([])}
+              okText="确定"
+              cancelText="取消"
+            >
+              <button className="btn-clear">清空全部</button>
+            </Popconfirm>
+          </div>
           {files.map((f) => (
             <div key={f.hash} className="shared-file-item">
               <div className="shared-file-info">

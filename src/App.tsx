@@ -378,14 +378,16 @@ function App() {
           />
         ) : (
           <>
-            {activeTab === "clipboard" && clipReady && (
-              <ClipboardPage entries={clipEntries} onCopy={handleCopy} onDelete={handleDelete}
-                onToggleFavorite={handleToggleFavorite} onClear={handleClear} />
-            )}
-            {activeTab === "fileshare" && (
+            <div style={{ display: activeTab === "clipboard" ? undefined : "none" }}>
+              {clipReady && (
+                <ClipboardPage entries={clipEntries} onCopy={handleCopy} onDelete={handleDelete}
+                  onToggleFavorite={handleToggleFavorite} onClear={handleClear} />
+              )}
+            </div>
+            <div style={{ display: activeTab === "fileshare" ? undefined : "none" }}>
               <FileSharePage downloadDir={downloadDirState} onStartDownload={handleStartDownload} />
-            )}
-            {activeTab === "settings" && (
+            </div>
+            <div style={{ display: activeTab === "settings" ? undefined : "none" }}>
               <SettingsPage themeMode={themeMode} onSetThemeMode={setThemeModePersist}
                 maxClipEntries={maxEntries} onSetMaxClipEntries={handleSetMaxEntries}
                 cleanupInterval={cleanupInterval} onSetCleanupInterval={handleSetCleanupInterval}
@@ -393,14 +395,14 @@ function App() {
                 localPeerId={localPeerId}
                 downloadDir={downloadDirState} onSetDownloadDir={handleSetDownloadDir}
                 ready={themeReady} />
-            )}
+            </div>
           </>
         )}
       </main>
       <nav className="tab-bar">
         {TABS.map((tab) => (
           <button key={tab.id} className={`tab-button ${activeTab === tab.id ? "active" : ""}`}
-            onClick={() => { setActiveTab(tab.id); setDownload(null); }}>
+            onClick={() => { setActiveTab(tab.id); }}>
             {tab.label}
           </button>
         ))}
