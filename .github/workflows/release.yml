@@ -5,6 +5,9 @@ on:
     branches:
       - release
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: build (${{ matrix.os }})
@@ -23,6 +26,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -32,6 +37,20 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: Create tag from version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          TAG="v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+          else
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Created tag $TAG"
+          fi
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -53,6 +72,7 @@ jobs:
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
+          tagName: v__VERSION__
           releaseDraft: true
           releaseName: "sovboard v__VERSION__"
           releaseBody: |
