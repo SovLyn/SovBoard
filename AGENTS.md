@@ -459,6 +459,12 @@ docs: 补充架构说明和开发命令
 - 补充 `README.md`：功能概览、技术栈、开发命令、MIT 许可证链接
 - 创建 `LICENSE`：MIT 许可证
 - 修改 `Cargo.toml`：authors = ["SovLyn"]，description 改为中文
+
+### Session 2026-07-25 — 下载路径存在性校验
+- **Rust 后端**：新增 `validate_download_dir` command，用 `Path::is_dir()` 校验目录是否存在
+- **前端**：`handleSetDownloadDir` 在持久化前调用 `invoke("validate_download_dir")`，不存在时弹出 `notification.error` 提示并阻止设置
+- **验证**：`cargo check` + `tsc --noEmit` 均通过
+
 ## P2P 文件分享
 
 > 状态：已完成 | 分支：`feat/p2p-file-share`（已合入 main）

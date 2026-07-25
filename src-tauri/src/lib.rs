@@ -363,6 +363,15 @@ async fn get_peer_list(
         .collect())
 }
 
+#[tauri::command]
+fn validate_download_dir(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("目录不存在: {}", path));
+    }
+    Ok(())
+}
+
 // ========== 应用入口 ==========
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -489,6 +498,7 @@ pub fn run() {
             cancel_download,
             search_files,
             get_peer_list,
+            validate_download_dir,
         ])
         .run(tauri::generate_context!())
         .expect("启动失败");

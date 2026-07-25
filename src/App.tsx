@@ -248,9 +248,16 @@ function App() {
     try { const s = await load(SETTINGS_STORE, { autoSave: false, defaults: {} }); await s.set(SHORTCUT_KEY, t); await s.save(); } catch {}
   }, []);
   const handleSetDownloadDir = useCallback(async (d: string) => {
-    const t = d.trim(); if (!t) return; setDownloadDirState(t);
+    const t = d.trim(); if (!t) return;
+    try {
+      await invoke("validate_download_dir", { path: t });
+    } catch (e) {
+      notification.error({ message: `下载路径无效: ${e}`, placement: "bottomRight" });
+      return;
+    }
+    setDownloadDirState(t);
     try { const s = await load(SETTINGS_STORE, { autoSave: false, defaults: {} }); await s.set(DOWNLOAD_DIR_KEY, t); await s.save(); } catch {}
-  }, []);
+  }, [notification]);
 
   // ===== 全局快捷键 =====
   useEffect(() => {

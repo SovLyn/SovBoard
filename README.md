@@ -33,13 +33,6 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-网络受限时设置代理：
-
-```powershell
-$env:HTTP_PROXY = "http://127.0.0.1:7890"
-$env:HTTPS_PROXY = "http://127.0.0.1:7890"
-```
-
 ## 许可证
 
 [MIT](LICENSE)

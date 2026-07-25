@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { InputNumber, Input, Radio, App } from "antd";
 import type { ThemeMode } from "../utils/theme";
 
@@ -19,7 +19,12 @@ function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipE
   const { notification } = App.useApp();
   const [capturing, setCapturing] = useState(false);
   const [capturedMods, setCapturedMods] = useState<string[]>([]);
+  const [localDir, setLocalDir] = useState(downloadDir);
   const inputRef = useRef<any>(null);
+
+  useEffect(() => {
+    setLocalDir(downloadDir);
+  }, [downloadDir]);
 
   const handleFocus = useCallback(() => { setCapturing(true); setCapturedMods([]); }, []);
   const handleBlur = useCallback(() => { setCapturing(false); setCapturedMods([]); }, []);
@@ -55,7 +60,8 @@ function SettingsPage({ themeMode, onSetThemeMode, maxClipEntries, onSetMaxClipE
       <div className="setting-item"><span className="setting-label">本机 Peer ID</span>
         <code className="setting-peer-id">{localPeerId || "获取中..."}</code></div>
       <div className="setting-item"><span className="setting-label">下载路径</span>
-        <Input variant="filled" value={downloadDir} onChange={(e) => onSetDownloadDir(e.target.value)} placeholder="文件下载保存目录" style={{ width: 300 }} /></div>
+        <Input variant="filled" value={localDir} onChange={(e) => setLocalDir(e.target.value)}
+          onBlur={() => onSetDownloadDir(localDir)} placeholder="文件下载保存目录" style={{ width: 300 }} /></div>
       <div className="setting-item"><span className="setting-label">全局快捷键</span>
         <Input variant="filled" ref={inputRef} value={displayVal} readOnly={capturing} onFocus={handleFocus} onBlur={handleBlur}
           onKeyDown={handleKeyDown} placeholder="点击后按下快捷键" className={capturing ? "shortcut-capturing" : ""}
